@@ -5,7 +5,6 @@ using HyperTizen.WebSocket.DataTypes;
 using System.Net.WebSockets;
 using System.Text;
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
 
@@ -17,32 +16,52 @@ namespace HyperTizen.WebSocket
         private int _loopRunning;
         private DateTime _lastReconnect = DateTime.MinValue;
 
-        internal static int ConditionRetryMs = 10000;
-        internal static int ErrorBackoffMs = 5000;
         internal static TimeSpan ReconnectInterval = TimeSpan.FromSeconds(5);
 
         // The presets HyperTizenUI offers; anything else sent as "targetFps" is ignored.
         public static readonly int[] FpsPresets = { 10, 15, 20, 25, 30, 40 };
-        public const int DefaultFps = 25;
-        private static volatile int _targetFps = DefaultFps;
-        private static volatile string _measuredFps = "0.0";
+        private static volatile CaptureMode _mode = CaptureMode.Balanced;
+        private static volatile int _targetFps = CaptureMode.Balanced.TargetFps;
 
-        /// <summary>Frames per second the loop paces to; read every frame, so changes apply at once.</summary>
+        /// <summary>Live performance numbers; reset when capture starts and when the mode or target FPS changes.</summary>
+        public static readonly CaptureStats Stats = new CaptureStats();
+
+        /// <summary>Both are read by the loop every frame, so changes apply without a restart.</summary>
+        public static CaptureMode Mode { get { return _mode; } }
         public static int TargetFps { get { return _targetFps; } }
-
-        /// <summary>Captured frames per second over the last second, "0.0" while not capturing.</summary>
-        public static string MeasuredFps { get { return _measuredFps; } }
 
         public static bool TrySetTargetFps(string value)
         {
             int fps;
             if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out fps) || Array.IndexOf(FpsPresets, fps) < 0) return false;
             _targetFps = fps;
+            Stats.Reset();
             return true;
+        }
+
+        /// <summary>Switches mode and moves the target FPS to the mode's.</summary>
+        public static bool TrySetMode(string name)
+        {
+            CaptureMode mode = CaptureMode.Find(name);
+            if (mode == null) return false;
+            _mode = mode;
+            _targetFps = mode.TargetFps;
+            Stats.Reset();
+            return true;
+        }
+
+        public static CaptureStats.Snapshot ReadStats()
+        {
+            CaptureStats.Snapshot s = Stats.Read(_targetFps);
+            s.mode = _mode.Label;
+            s.resolution = Capturer.Resolution;
+            return s;
         }
 
         public HyperionClient()
         {
+            // Mode first: it sets its own target FPS, which a saved targetFps then fine-tunes.
+            if (Preference.Contains("captureMode")) TrySetMode(Preference.Get<string>("captureMode"));
             if (Preference.Contains("targetFps")) TrySetTargetFps(Preference.Get<string>("targetFps"));
             if (!Preference.Contains("rpcServer")) return;
             client = new WebSocketClient(Preference.Get<string>("rpcServer"));
@@ -93,7 +112,7 @@ namespace HyperTizen.WebSocket
                 // A missing API never appears at runtime. Otherwise the API exists but the condition
                 // read failed (already persisted and notified): retry slowly instead of spinning.
                 if (Capturer.Unsupported) return;
-                await Task.Delay(ConditionRetryMs);
+                await Task.Delay(_mode.ConditionRetryMs);
                 if (!App.Configuration.Enabled)
                 {
                     Capturer.SetState("stopped");
@@ -101,53 +120,67 @@ namespace HyperTizen.WebSocket
                 }
             }
 
-            var clock = Stopwatch.StartNew();
-            double nextFrameMs = 0;
-            double windowStartMs = 0;
-            int windowFrames = 0;
+            Stats.Reset(); // fresh numbers for every capture session
+            double nextFrameMs = Stats.Now();
             while (App.Configuration.Enabled)
             {
+                int epoch = Stats.Epoch;
+                CaptureMode mode = _mode;
+                double start = Stats.Now(), captured, imaged;
                 string image;
                 try
                 {
-                    image = Capturer.ToImage(Capturer.GetColors());
+                    Color[] colors = Capturer.GetColors();
+                    captured = Stats.Now();
+                    image = Capturer.ToImage(colors);
+                    imaged = Stats.Now();
                 }
                 catch (Exception e)
                 {
+                    Stats.AddFailed(epoch);
                     Capturer.ReportError("frame capture", e);
-                    _measuredFps = "0.0";
-                    await Task.Delay(ErrorBackoffMs);
-                    nextFrameMs = windowStartMs = clock.Elapsed.TotalMilliseconds;
-                    windowFrames = 0;
+                    await Task.Delay(mode.ErrorBackoffMs);
+                    nextFrameMs = Stats.Now();
                     continue;
                 }
 
                 // Only a frame that actually came back from the capture API counts as running.
                 Capturer.SetState("running");
-                await SendAsync(image);
+                bool sent = await SendAsync(image);
+                double worked = Stats.Now();
 
-                double now = clock.Elapsed.TotalMilliseconds;
-                windowFrames++;
-                if (now - windowStartMs >= 1000)
+                // Pace against a deadline instead of sleeping a fixed time: capture, image and send
+                // time count toward the frame, and a timer that wakes late shortens the next wait.
+                double interval = 1000.0 / _targetFps;
+                nextFrameMs += interval;
+                if (worked > nextFrameMs)
                 {
-                    _measuredFps = (windowFrames * 1000 / (now - windowStartMs)).ToString("0.0", CultureInfo.InvariantCulture);
-                    windowStartMs = now;
-                    windowFrames = 0;
+                    // This frame ran past the next slot. Nothing is queued, overlapped or burst to
+                    // catch up: the slots that went by are dropped.
+                    double behind = (worked - nextFrameMs) / interval;
+                    if (mode.KeepFrameGrid)
+                    {
+                        double skipped = Math.Ceiling(behind);
+                        Stats.AddDropped(epoch, skipped);
+                        nextFrameMs += skipped * interval; // wait for the next slot on the grid
+                    }
+                    else
+                    {
+                        Stats.AddDropped(epoch, behind);
+                        nextFrameMs = worked;              // start the next frame now
+                    }
                 }
-
-                // Pace against a deadline instead of sleeping a fixed time: capture and send time
-                // count toward the frame, and a timer that wakes late shortens the next wait. A frame
-                // that overran starts the next one immediately rather than bursting to catch up.
-                nextFrameMs += 1000.0 / _targetFps;
-                double wait = nextFrameMs - now;
+                double wait = nextFrameMs - worked;
                 if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait));
-                else nextFrameMs = now;
+
+                double end = Stats.Now();
+                Stats.AddFrame(epoch, captured - start, imaged - captured, worked - imaged, end - worked, end - start, sent);
             }
-            _measuredFps = "0.0";
             Capturer.SetState("stopped");
         }
 
-        private async Task SendAsync(string image)
+        /// <summary>True when HyperHDR got the frame.</summary>
+        private async Task<bool> SendAsync(string image)
         {
             WebSocketClient c = client;
             if (c.client.State == WebSocketState.Open)
@@ -156,6 +189,7 @@ namespace HyperTizen.WebSocket
                 {
                     var buffer = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new ImageCommand(image)));
                     await c.client.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
+                    return true;
                 }
                 catch (Exception) { } // dropped mid-send: the socket is no longer Open, so the next frame redials
             }
@@ -167,6 +201,7 @@ namespace HyperTizen.WebSocket
                 _lastReconnect = DateTime.UtcNow;
                 _ = c.ReconnectAsync();
             }
+            return false;
         }
 
         public async Task Stop()

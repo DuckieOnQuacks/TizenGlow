@@ -123,10 +123,11 @@ namespace HyperTizen.WebSocket
         private async Task<string> ReadConfigAsync(ReadConfigEvent readConfigEvent)
         {
             string result;
-            if (readConfigEvent.key == "captureFps")
+            if (readConfigEvent.key == "captureStats")
             {
-                // Live value, kept out of Preference so a running loop doesn't write storage every second.
-                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, HyperionClient.MeasuredFps));
+                // Live values (an object, see CaptureStats.Snapshot), kept out of Preference so a
+                // running loop doesn't write storage every frame.
+                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, HyperionClient.ReadStats()));
             }
             else if (!Preference.Contains(readConfigEvent.key))
             {
@@ -178,6 +179,14 @@ namespace HyperTizen.WebSocket
                         // Picked up by the running loop on its next frame. Anything but a preset is
                         // ignored and not saved.
                         if (!HyperionClient.TrySetTargetFps(setConfigEvent.value)) return;
+                        break;
+                    }
+                case "captureMode":
+                    {
+                        // fast / balanced / smooth, picked up by the running loop on its next frame. The
+                        // mode also sets the target FPS; save that too so both survive a restart.
+                        if (!HyperionClient.TrySetMode(setConfigEvent.value)) return;
+                        Preference.Set("targetFps", HyperionClient.TargetFps.ToString());
                         break;
                     }
             }

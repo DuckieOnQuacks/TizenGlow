@@ -36,12 +36,27 @@ function onOpen() {
     send({ event: events.ReadConfig, key: 'rpcServer' });
     send({ event: events.ReadConfig, key: 'enabled' });
     send({ event: events.ScanSSDP });
-    setInterval(() => {
-        send({ event: events.ScanSSDP });
-    }, 10000);
+    send({ event: events.ReadConfig, key: 'captureMode' });
     send({ event: events.ReadConfig, key: 'targetFps' });
     readCaptureStatus();
-    setInterval(readCaptureStatus, 3000);
+    // One timer each, however often this runs.
+    clearInterval(ssdpTimer);
+    clearInterval(statusTimer);
+    ssdpTimer = setInterval(() => send({ event: events.ScanSSDP }), 10000);
+    statusTimer = setInterval(readCaptureStatus, 1000);
+}
+
+let ssdpTimer = null;
+let statusTimer = null;
+
+function stepIn(list, current, step, wrap) {
+    const n = list.length;
+    const i = list.indexOf(current) + step;
+    return list[wrap ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+}
+
+function connected() {
+    return client && client.readyState === WebSocket.OPEN;
 }
 
 // Must match HyperionClient.FpsPresets; the service ignores anything else.
@@ -55,29 +70,70 @@ function showTargetFps(fps) {
 
 // OK cycles through the presets (wrapping), Left/Right step down/up.
 window.stepTargetFps = (step, wrap) => {
-    if (!client || client.readyState !== WebSocket.OPEN) return;
-    const n = fpsPresets.length;
-    const i = fpsPresets.indexOf(targetFps) + step;
-    const next = fpsPresets[wrap ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+    if (!connected()) return;
+    const next = stepIn(fpsPresets, targetFps, step, wrap);
     if (next === targetFps) return;
     showTargetFps(next);
     send({ event: events.SetConfig, key: 'targetFps', value: String(next) });
 }
 
-// Written by the native service (Capturer.cs) as preferences, except captureFps which it
-// serves live; all read back with ReadConfig.
-const captureStatusKeys = ['captureState', 'captureFps', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
+// Must match CaptureMode.cs.
+const captureModes = ['fast', 'balanced', 'smooth'];
+const captureModeLabels = { fast: 'Fast', balanced: 'Balanced', smooth: 'Smooth' };
+let captureMode = 'balanced';
+
+function showCaptureMode(mode) {
+    captureMode = captureModes.indexOf(mode) !== -1 ? mode : 'balanced';
+    document.getElementById('captureMode').innerHTML = 'Capture Quality: ' + captureModes
+        .map(m => m === captureMode ? `<span class="active">${captureModeLabels[m]}</span>` : captureModeLabels[m]).join(' | ');
+}
+
+// Same keys as Target FPS. A mode also sets its own target FPS, so read that back.
+window.stepCaptureMode = (step, wrap) => {
+    if (!connected()) return;
+    const next = stepIn(captureModes, captureMode, step, wrap);
+    if (next === captureMode) return;
+    showCaptureMode(next);
+    send({ event: events.SetConfig, key: 'captureMode', value: next });
+    send({ event: events.ReadConfig, key: 'targetFps' });
+}
+
+// Written by the native service (Capturer.cs) as preferences; read back with ReadConfig.
+const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
 
 function readCaptureStatus() {
     for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
+    send({ event: events.ReadConfig, key: 'captureStats' });
+}
+
+// Only touch the DOM on change: every mutation makes index.html rebuild its D-pad focus list.
+function setText(id, text) {
+    const element = document.getElementById(id);
+    if (element.textContent !== text) element.textContent = text;
 }
 
 function showCaptureStatus(msg) {
-    const text = !msg.error ? String(msg.value)
-        : msg.key === 'captureState' ? 'not reported (is native HyperTizen 1.0.1+ installed?)' : '-';
-    const element = document.getElementById(msg.key);
-    // Only touch the DOM on change: every mutation makes index.html rebuild its D-pad focus list.
-    if (element.textContent !== text) element.textContent = text;
+    setText(msg.key, !msg.error ? String(msg.value)
+        : msg.key === 'captureState' ? 'not reported (is native HyperTizen 1.0.1+ installed?)' : '-');
+}
+
+// Live numbers from the service (CaptureStats.cs), over its rolling 2 s window.
+function showCaptureStats(msg) {
+    const s = msg.error ? null : msg.value; // error: native older than 1.0.3
+    const num = (v, unit) => !s ? '-' : v === null || v === undefined ? 'measuring' : v.toFixed(1) + (unit || '');
+    const running = document.getElementById('captureState').textContent === 'running';
+    setText('statMode', s ? s.mode : '-');
+    setText('statResolution', s && s.resolution ? s.resolution : '-');
+    setText('statPerformance', s && running ? s.performance : '-');
+    setText('statTargetFps', s ? String(s.targetFps) : '-');
+    setText('statCaptureFps', num(s && s.captureFps));
+    setText('statSendFps', num(s && s.sendFps));
+    setText('statCaptureMs', num(s && s.averageCaptureMs, ' ms'));
+    setText('statFrameMs', num(s && s.averageFrameMs, ' ms'));
+    setText('statFailed', s ? String(s.failedFrames) : '-');
+    setText('statDropped', s ? String(s.droppedFrames) : '-');
+    setText('statBreakdown', !s || s.averageFrameMs === null ? '-'
+        : `capture ${num(s.averageCaptureMs)} + image ${num(s.averageImageMs)} + send ${num(s.averageSendMs)} + wait ${num(s.averageWaitMs)} ms`);
 }
 
 function onMessage(data) {
@@ -91,6 +147,10 @@ function onMessage(data) {
                 document.getElementById('enabled').checked = msg.value === 'true';
             } else if (msg.key === 'targetFps') {
                 showTargetFps(msg.error ? 25 : Number(msg.value));
+            } else if (msg.key === 'captureMode') {
+                showCaptureMode(msg.error ? 'balanced' : msg.value);
+            } else if (msg.key === 'captureStats') {
+                showCaptureStats(msg);
             } else if (captureStatusKeys.indexOf(msg.key) !== -1) {
                 showCaptureStatus(msg);
             }

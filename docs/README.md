@@ -47,18 +47,47 @@ HyperTizenUI shows what the service found:
 | Field | Meaning |
 |---|---|
 | State | `idle` (capture disabled), `starting`, `running` (frames are being captured), `stopped`, `no-server` (no HyperHDR address saved), `unsupported` (no complete API), `error` (see Last error) |
-| Measured FPS | Frames actually captured per second over the last second (`0.0` when not capturing) |
 | API | `ppi_ve`, `ve`, `cs_ve` or `unsupported`, plus the platform version |
 | Condition | What the panel reported: result code, capture points, resolution, pixel density, sleep |
 | Last error | Timestamped error with exception, API, library path, platform version and which symbol families were complete, partial or missing |
 
 `not reported` means the installed native service is older than 1.0.1.
 
+### Performance statistics (native 1.0.3+)
+
+Measured by the service over a rolling 2 second window and refreshed in the UI once a second. Nothing is shown until 1 second of data exists, and the Performance verdict waits for a full window. The window and counters reset when capture is enabled, when the Capture Quality mode changes and when Target FPS changes; reopening the UI does not reset them.
+
+| Field | Meaning |
+|---|---|
+| Mode / Target FPS | Active Capture Quality mode and the frame rate the loop paces to |
+| Capture FPS | Frames that came back from the TV's capture API per second |
+| Send FPS | Frames HyperHDR actually received per second (0 while it is unreachable) |
+| Avg capture time | Time in the capture API per frame (sampling the 16 screen points) |
+| Avg frame time | Whole loop iteration per frame: capture + image + send + pacing wait. Frame breakdown shows each part |
+| Failed frames | Frames whose capture or image step threw an error |
+| Dropped frames | Frame slots the target asked for that passed without a capture because the previous frame was still running (see below) |
+| Performance | `target met` (capture FPS at least 90% of target), `capture limited` (capture + image + send alone take at least 90% of a frame interval), `below target` (anything else), `measuring` |
+
+Dropped frames: with a target of 30 FPS there is a frame slot every 33.3 ms. If a frame takes 92 ms, the slots it ran over are not made up later: frames are never queued, run in parallel or sent in a burst to catch up. Those passed slots are counted as dropped (fractionally per frame, shown rounded down), so dropped per second is about target FPS minus capture FPS. Waiting for the next slot when a frame finished early is normal pacing and never counts as dropped.
+
+### Capture Quality
+
+The **Capture Quality** selector under Enabled picks a preset (OK cycles, LEFT / RIGHT step). Balanced is the default. The choice is remembered, applies to the next frame without restarting capture, and also sets Target FPS, which you can then fine-tune.
+
+| | Fast | Balanced | Smooth |
+|---|---|---|---|
+| Target FPS | 30 | 25 | 15 |
+| A frame that overruns its slot | next frame starts at once | next frame starts at once | waits for the next slot of the 15 FPS grid, so frames are always whole intervals apart |
+| Pause after a failed frame | 1 s | 5 s | 5 s |
+| Condition read retry | 5 s | 10 s | 10 s |
+
+The modes do not change how many screen points are sampled: the 16 points are mapped one-to-one onto the image HyperHDR receives, and the firmware decides how many are read per batch. They also do not smooth colours; HyperHDR's own smoothing stays in charge of LED transitions.
+
 ### Target FPS
 
-The **Target FPS** button under Enabled sets how fast the service captures: 10, 15, 20, 25 (default), 30 or 40. Press [OK] to cycle through the values, or [LEFT] / [RIGHT] to step down / up. The change applies to the next frame and is remembered (needs native 1.0.2+).
+The **Target FPS** button under Capture Quality sets how fast the service captures: 10, 15, 20, 25, 30 or 40. Press [OK] to cycle through the values, or [LEFT] / [RIGHT] to step down / up. The change applies to the next frame and is remembered (needs native 1.0.2+).
 
-Capture time counts toward each frame, so the service only waits for whatever is left of the frame interval. If Measured FPS stays below the target, the TV's capture API is the limit: each frame reads the screen in batches and the firmware asks for a pause (`sleepMs` in Condition) after every batch.
+Capture, image and send time count toward each frame, so the service only waits for whatever is left of the frame interval. If Capture FPS stays below the target, the TV's capture API is the limit: each frame reads the screen in batches and the firmware asks for a pause (`sleepMs` in Condition) after every batch, so the ceiling is roughly 1000 / ((16 / points) x sleepMs) frames per second.
 
 ## Building the package
 

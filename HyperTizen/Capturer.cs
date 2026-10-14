@@ -48,6 +48,9 @@ namespace HyperTizen
             new CapturePoint(0.65, 0.5)
         };
         
+        /// <summary>Panel size from the last successful condition read, e.g. "3840x2160", else null.</summary>
+        public static string Resolution { get { return _api != null ? _condition.Width + "x" + _condition.Height : null; } }
+
         /// <summary>True when libvideoenhance.so has no complete RGB-measure API, so retrying is pointless.</summary>
         public static bool Unsupported { get { return Probe().Candidates.Count == 0; } }
 
