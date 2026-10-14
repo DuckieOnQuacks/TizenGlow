@@ -1,5 +1,5 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.0.6';
+const uiVersion = '1.0.7';
 
 let client;
 let deviceIP;

@@ -122,6 +122,11 @@ namespace HyperTizen.Wled
             return true;
         }
 
+        // The target can be set by anything that reaches port 8086, so the info request is fenced in:
+        // local-network addresses only, one fixed path, a capped reply, and only sanitised fields echoed.
+        private const int MaxInfoBytes = 64 * 1024;      // WLED's /json/info is a few KB
+        internal static bool AllowLoopbackInfo = false;  // tests only: their fake WLED runs on this PC
+
         /// <summary>
         /// Reads WLED's own LED count (GET /json/info, read-only; frames never use HTTP) so the UI can warn
         /// when the layout total doesn't match it. Retries every InfoRetryMs while WLED can't be reached,
@@ -131,23 +136,47 @@ namespace HyperTizen.Wled
         {
             Task.Run(async () =>
             {
-                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) })
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3), MaxResponseContentBufferSize = MaxInfoBytes })
                 {
                     while (true)
                     {
                         lock (_lock) if (generation != _infoGeneration) return; // a newer target took over
                         string info;
                         int? count = null;
+                        bool retry = true;
                         try
                         {
-                            JObject json = JObject.Parse(await http.GetStringAsync("http://" + host + ":" + InfoPort + "/json/info"));
-                            count = (int?)json["leds"]?["count"];
-                            info = count == null ? "WLED answered without an LED count"
-                                : "WLED " + json["ver"] + (json["name"] != null ? " \"" + json["name"] + "\"" : "");
+                            IPAddress ip;
+                            if (!IPAddress.TryParse(host, out ip))
+                            {
+                                ip = null;
+                                foreach (IPAddress a in await Dns.GetHostAddressesAsync(host))
+                                    if (a.AddressFamily == AddressFamily.InterNetwork) { ip = a; break; }
+                            }
+                            if (ip == null || !IsLocalNetwork(ip))
+                            {
+                                info = "not asking " + host + " for its LED count: not a local network address";
+                                retry = false;
+                            }
+                            else
+                            {
+                                // Connect to the address just checked, so DNS can't switch it before the request.
+                                var request = new HttpRequestMessage(HttpMethod.Get, "http://" + ip + ":" + InfoPort + "/json/info");
+                                request.Headers.Host = host + (InfoPort == 80 ? "" : ":" + InfoPort);
+                                using (HttpResponseMessage response = await http.SendAsync(request))
+                                {
+                                    response.EnsureSuccessStatusCode();
+                                    JObject json = JObject.Parse(await response.Content.ReadAsStringAsync());
+                                    count = (int?)json["leds"]?["count"];
+                                    info = count == null ? "WLED answered without an LED count"
+                                        : "WLED " + Clean(json["ver"]) + (json["name"] != null ? " \"" + Clean(json["name"]) + "\"" : "");
+                                }
+                            }
                         }
                         catch (Exception e)
                         {
-                            info = "couldn't read WLED's LED count (" + e.GetType().Name + ": " + e.Message + "); retrying every " + InfoRetryMs / 1000 + " s";
+                            string message = e.Message.Length > 120 ? e.Message.Substring(0, 120) + "..." : e.Message;
+                            info = "couldn't read WLED's LED count (" + e.GetType().Name + ": " + message + "); retrying every " + InfoRetryMs / 1000 + " s";
                         }
                         lock (_lock)
                         {
@@ -155,11 +184,36 @@ namespace HyperTizen.Wled
                             _wledInfo = info;
                             _wledLedCount = count;
                         }
-                        if (count != null) return;
+                        if (count != null || !retry) return;
                         await Task.Delay(InfoRetryMs);
                     }
                 }
             });
+        }
+
+        /// <summary>Private (RFC 1918) and link-local IPv4 only: where a WLED can be, never the TV itself or the internet.</summary>
+        internal static bool IsLocalNetwork(IPAddress ip)
+        {
+            if (ip.AddressFamily != AddressFamily.InterNetwork) return false;
+            byte[] b = ip.GetAddressBytes();
+            return b[0] == 10
+                || (b[0] == 172 && b[1] >= 16 && b[1] <= 31)
+                || (b[0] == 192 && b[1] == 168)
+                || (b[0] == 169 && b[1] == 254)
+                || (AllowLoopbackInfo && b[0] == 127);
+        }
+
+        /// <summary>A WLED-reported string reduced to plain characters and at most 40 of them.</summary>
+        private static string Clean(JToken token)
+        {
+            string s = token == null ? "" : token.ToString();
+            var sb = new System.Text.StringBuilder();
+            foreach (char c in s)
+            {
+                if (sb.Length == 40) break;
+                if (char.IsLetterOrDigit(c) || " ._-()".IndexOf(c) >= 0) sb.Append(c);
+            }
+            return sb.ToString();
         }
 
         public bool TrySetLayout(string value)
