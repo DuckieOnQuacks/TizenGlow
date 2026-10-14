@@ -39,6 +39,23 @@ function onOpen() {
     setInterval(() => {
         send({ event: events.ScanSSDP });
     }, 10000);
+    readCaptureStatus();
+    setInterval(readCaptureStatus, 3000);
+}
+
+// Written by the native service (Capturer.cs) as preferences; read back with ReadConfig.
+const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
+
+function readCaptureStatus() {
+    for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
+}
+
+function showCaptureStatus(msg) {
+    const text = !msg.error ? String(msg.value)
+        : msg.key === 'captureState' ? 'not reported (is native HyperTizen 1.0.1+ installed?)' : '-';
+    const element = document.getElementById(msg.key);
+    // Only touch the DOM on change: every mutation makes index.html rebuild its D-pad focus list.
+    if (element.textContent !== text) element.textContent = text;
 }
 
 function onMessage(data) {
@@ -50,6 +67,8 @@ function onMessage(data) {
                 showRPC(msg.value);
             } else if(msg.key === 'enabled' && !msg.error) {
                 document.getElementById('enabled').checked = msg.value === 'true';
+            } else if (captureStatusKeys.indexOf(msg.key) !== -1) {
+                showCaptureStatus(msg);
             }
             break;
         case events.SSDPScanResult: {

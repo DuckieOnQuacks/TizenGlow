@@ -145,12 +145,12 @@ namespace HyperTizen.WebSocket
                 case "enabled":
                     {
                         bool value = bool.Parse(setConfigEvent.value);
-                        if (!App.Configuration.Enabled && value)
-                        {
-                            App.Configuration.Enabled = value;
-                            Task.Run(() => App.client.Start(value));
-                        }
-                        else App.Configuration.Enabled = value;
+                        App.Configuration.Enabled = value;
+
+                        // Start whenever capture should be on. Start() ignores the call if a loop is
+                        // already alive; the old false->true edge check left a loop that had exited
+                        // for any other reason impossible to restart from the UI.
+                        if (value) Task.Run(() => App.client.Start());
                         break;
                     }
             }
@@ -180,28 +180,54 @@ namespace HyperTizen.WebSocket
             client = new ClientWebSocket();
         }
 
+        private int _connecting;
+
         public async Task ConnectAsync()
         {
-            await client.ConnectAsync(new Uri(uri), CancellationToken.None);
-            _ = ReceiveMessagesAsync();
+            // Callers fire this with Task.Run and never observe it, so a failed dial (HyperHDR
+            // down, network not up yet) used to vanish and leave the socket Closed for good.
+            // The capture loop sees the non-Open state and calls ReconnectAsync.
+            try
+            {
+                await client.ConnectAsync(new Uri(uri), CancellationToken.None);
+                _ = ReceiveMessagesAsync();
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>A ClientWebSocket cannot be reused once closed, so reconnecting builds a new one.</summary>
+        public async Task ReconnectAsync()
+        {
+            if (Interlocked.Exchange(ref _connecting, 1) == 1) return;
+            try
+            {
+                try { client?.Abort(); client?.Dispose(); } catch { }
+                client = new ClientWebSocket();
+                await ConnectAsync();
+            }
+            finally { Interlocked.Exchange(ref _connecting, 0); }
         }
 
         private async Task ReceiveMessagesAsync()
         {
             var buffer = new byte[1024 * 4];
-            while (client.State == WebSocketState.Open)
+            try
             {
-                var result = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-                if (result.MessageType == WebSocketMessageType.Close)
+                while (client.State == WebSocketState.Open)
                 {
-                    await client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-                }
-                else
-                {
-                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    OnMessage(message);
+                    var result = await client.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        await client.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+                    }
+                    else
+                    {
+                        var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                        OnMessage(message);
+                    }
                 }
             }
+            catch (Exception) { } // peer went away mid-receive; the capture loop's watchdog redials
         }
 
         private void OnMessage(string message)

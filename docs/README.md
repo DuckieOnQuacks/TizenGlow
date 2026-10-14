@@ -38,6 +38,31 @@ If the "SSDP Devices" list stays empty (multicast blocked, VLANs, firewall, etc.
 
 This saves the same `rpcServer` setting that selecting an SSDP device does, so it persists across restarts and the SSDP list can still be used at any time.
 
+## Native Capture Status
+
+Since 1.0.1 the service finds the capture API at runtime: it opens `/usr/lib/libvideoenhance.so` and uses a function family only if all three of its RGB-measure exports exist (`ppi_ve_*` on Tizen 9/10 firmware, `ve_*` on Tizen 7/8, `cs_ve_*` on older TVs). The Tizen version only decides which complete family is tried first: the one v1.0.0 used, so TVs that already worked make the same calls.
+
+HyperTizenUI shows what the service found:
+
+| Field | Meaning |
+|---|---|
+| State | `idle` (capture disabled), `starting`, `running` (frames are being captured), `stopped`, `no-server` (no HyperHDR address saved), `unsupported` (no complete API), `error` (see Last error) |
+| API | `ppi_ve`, `ve`, `cs_ve` or `unsupported`, plus the platform version |
+| Condition | What the panel reported: result code, capture points, resolution, pixel density, sleep |
+| Last error | Timestamped error with exception, API, library path, platform version and which symbol families were complete, partial or missing |
+
+`not reported` means the installed native service is older than 1.0.1.
+
+## Building the package
+
+Requires the [.NET SDK](https://dotnet.microsoft.com/download) (tested with 8.0.426); the `Tizen.NET.Sdk` build SDK is restored from NuGet automatically, so Tizen Studio is not needed to build.
+
+```bash
+dotnet build HyperTizen/HyperTizen.csproj -c Release
+```
+
+The package is written to `HyperTizen/bin/Release/tizen90/io.gh.reisxd.HyperTizen-<version>.tpk`. It is signed with the Tizen SDK's default test certificates, which Samsung TVs reject, so re-sign it with your own Samsung certificate (see below, or use TizenBrew Installer) before installing.
+
 ## Resigning the package
 
 1. Change the Host PC IP address to your PC's IP address by following [this](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK)

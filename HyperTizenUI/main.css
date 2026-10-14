@@ -61,6 +61,22 @@ a {
     text-align: center;
 }
 
+#captureStatus {
+    width: 60%;
+    color: #fff;
+    font-size: 24px;
+    overflow-wrap: anywhere;
+}
+
+#captureStatus h3 {
+    font-size: 30px;
+    text-align: center;
+}
+
+#captureStatus p {
+    margin: 0.3rem 0;
+}
+
 #manualServer {
     display: flex;
     flex-direction: column;

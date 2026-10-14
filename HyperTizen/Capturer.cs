@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading;
 using SkiaSharp;
+using Tizen.Applications;
 using Tizen.Applications.Notifications;
 using Tizen.System;
 
@@ -11,20 +12,20 @@ namespace HyperTizen
     public static class Capturer
     {
         private static Condition _condition;
+        private static CaptureProbe _probe;
+        private static CaptureFamily _api;
+        private static string _state;
+        private static readonly HashSet<string> _notified = new HashSet<string>();
 
-        private static bool IsTizen7OrHigher
+        // A pixel read that keeps failing used to be retried forever, pinning a core.
+        private const int MaxPixelAttempts = 100;
+
+        public static string PlatformVersion
         {
             get
             {
                 string version;
-                Information.TryGetValue("http://tizen.org/feature/platform.version", out version);
-                if (int.Parse(version.Split('.')[0]) >= 7)
-                {
-                    return true;
-                } else
-                {
-                    return false;
-                }
+                return Information.TryGetValue("http://tizen.org/feature/platform.version", out version) ? version : "unknown";
             }
         }
 
@@ -47,54 +48,126 @@ namespace HyperTizen
             new CapturePoint(0.65, 0.5)
         };
         
-        [DllImport("/usr/lib/libvideoenhance.so", CallingConvention = CallingConvention.Cdecl, EntryPoint = "cs_ve_get_rgb_measure_condition")]
-        private static extern int MeasureCondition(out Condition unknown);
+        /// <summary>True when libvideoenhance.so has no complete RGB-measure API, so retrying is pointless.</summary>
+        public static bool Unsupported { get { return Probe().Candidates.Count == 0; } }
 
-        [DllImport("/usr/lib/libvideoenhance.so", CallingConvention = CallingConvention.Cdecl, EntryPoint = "cs_ve_set_rgb_measure_position")]
-        private static extern int MeasurePosition(int i, int x, int y);
+        /// <summary>
+        /// Probes libvideoenhance.so once and publishes what it found. Cheap and call-free (only
+        /// dlopen/dlsym), so it runs at service start even while capture is disabled.
+        /// </summary>
+        /// <param name="resolve">Test seam: symbol resolver to use instead of the real library.</param>
+        public static CaptureProbe Probe(Func<string, IntPtr> resolve = null)
+        {
+            if (_probe != null && resolve == null) return _probe;
+            string version = PlatformVersion;
+            _probe = resolve == null ? CaptureProbe.Run(version) : CaptureProbe.Run(version, resolve);
+            _api = null;
+            _condition = default(Condition);
+            Report("detectedPlatformVersion", version);
+            Report("detectedApi", _probe.Selected);
+            Report("captureCondition", "not read yet");
+            SetState(_probe.Candidates.Count == 0 ? "unsupported" : "idle");
+            return _probe;
+        }
 
-        [DllImport("/usr/lib/libvideoenhance.so", CallingConvention = CallingConvention.Cdecl, EntryPoint = "cs_ve_get_rgb_measure_pixel")]
-        private static extern int MeasurePixel(int i, out Color color);
-
-        [DllImport("/usr/lib/libvideoenhance.so", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ve_get_rgb_measure_condition")]
-        private static extern int MeasureCondition7(out Condition unknown);
-
-        [DllImport("/usr/lib/libvideoenhance.so", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ve_set_rgb_measure_position")]
-        private static extern int MeasurePosition7(int i, int x, int y);
-
-        [DllImport("/usr/lib/libvideoenhance.so", CallingConvention = CallingConvention.Cdecl, EntryPoint = "ve_get_rgb_measure_pixel")]
-        private static extern int MeasurePixel7(int i, out Color color);
-        
+        /// <summary>
+        /// Reads the panel's measure condition with the best complete API, falling back to the
+        /// next complete one if it fails. Every failure is persisted and the TV notification
+        /// says why; it never fails silently.
+        /// </summary>
         public static bool GetCondition()
         {
-            int res = -1;
-            try
+            CaptureProbe probe = Probe();
+            if (probe.Candidates.Count == 0)
             {
-                if (!IsTizen7OrHigher)
-                {
-                    res = MeasureCondition(out _condition);
-                } else
-                {
-                    res = MeasureCondition7(out _condition);
-                }
-            } catch
-            {
-                Notification notification = new Notification
-                {
-                    Title = "HyperTizen",
-                    Content = "Your TV does not support the required functions for HyperTizen.",
-                    Count = 1
-                };
-
-                NotificationManager.Post(notification);
-            }
-            if (res < 0)
-            {
+                if (probe.LoadError != null) Fail("unsupported", "cannot load libvideoenhance.so", "cannot load libvideoenhance.so (" + probe.LoadError + ")");
+                else Fail("unsupported", "no complete ppi_ve/ve/cs_ve API", "no complete ppi_ve/ve/cs_ve API in libvideoenhance.so");
                 return false;
-            } else
-            {
-                return true;
             }
+
+            var failures = new List<string>();
+            string firstReason = null; // short form for the TV notification
+            foreach (CaptureFamily family in probe.Candidates)
+            {
+                Condition condition;
+                int res;
+                try
+                {
+                    res = family.MeasureCondition(out condition);
+                }
+                catch (Exception e)
+                {
+                    failures.Add(family.Name + "_get_rgb_measure_condition threw " + e.GetType().FullName + ": " + e.Message);
+                    firstReason = firstReason ?? family.Name + " threw " + e.GetType().Name;
+                    continue;
+                }
+
+                Report("captureCondition", family.Name + " res=" + res + " points=" + condition.ScreenCapturePoints
+                    + " size=" + condition.Width + "x" + condition.Height
+                    + " density=" + condition.PixelDensityX + "x" + condition.PixelDensityY + " sleepMs=" + condition.SleepMS);
+
+                if (res >= 0 && condition.ScreenCapturePoints > 0 && condition.Width > 0 && condition.Height > 0)
+                {
+                    _condition = condition;
+                    _api = family;
+                    Report("detectedApi", family.Name);
+                    Report("lastCaptureError", failures.Count == 0 ? "none" : Diagnostic("GetCondition fell back to " + family.Name, string.Join("; ", failures)));
+                    return true;
+                }
+                failures.Add(family.Name + "_get_rgb_measure_condition returned " + res + (res >= 0 ? " with an unusable condition" : ""));
+                firstReason = firstReason ?? family.Name + " condition returned " + res;
+            }
+
+            Fail("error", firstReason, string.Join("; ", failures));
+            return false;
+        }
+
+        /// <summary>Persists a capture-loop exception. No notification: the loop may hit it repeatedly.</summary>
+        public static void ReportError(string phase, Exception e)
+        {
+            Report("lastCaptureError", Diagnostic(phase + " failed", e.GetType().FullName + ": " + e.Message));
+            SetState("error");
+        }
+
+        /// <summary>captureState: idle, starting, running, stopped, no-server, unsupported or error.</summary>
+        public static void SetState(string state)
+        {
+            if (state == _state) return; // the frame loop calls this every frame; only persist changes
+            _state = state;
+            Report("captureState", state);
+        }
+
+        private static void Fail(string state, string reason, string detail)
+        {
+            Report("lastCaptureError", Diagnostic(state == "unsupported" ? "probe" : "GetCondition failed", detail));
+            SetState(state);
+            Notify("Capture " + (state == "unsupported" ? "unavailable" : "failed") + ": " + reason + ". Details in HyperTizenUI.");
+        }
+
+        private static string Diagnostic(string what, string detail)
+        {
+            return DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "Z " + what + ": " + detail
+                + " | api=" + (_api != null ? _api.Name : _probe != null ? _probe.Selected : "not probed")
+                + " | lib=" + CaptureProbe.LibraryPath
+                + " | platform=" + PlatformVersion
+                + " | symbols: " + (_probe != null ? _probe.Symbols : "not probed")
+                + (_probe != null && _probe.LoadError != null ? " | load: " + _probe.LoadError : "");
+        }
+
+        private static void Report(string key, string value)
+        {
+            try { Preference.Set(key, value); }
+            catch { } // ponytail: nowhere left to report a failed diagnostics write; it must not stop capture
+        }
+
+        private static void Notify(string content)
+        {
+            lock (_notified)
+            {
+                if (!_notified.Add(content)) return; // once per service run; condition retries would repeat it
+            }
+            try { NotificationManager.Post(new Notification { Title = "HyperTizen", Content = content, Count = 1 }); }
+            catch { } // details are already persisted in lastCaptureError
         }
 
         public static void SetCapturePoints(CapturePoint[] capturePoints)
@@ -106,11 +179,12 @@ namespace HyperTizen
         {
             Color[] colorData = new Color[_capturedPoints.Length];
             int[] updatedIndexes = new int[_condition.ScreenCapturePoints];
+            CaptureFamily api = _api;
 
             int i = 0;
             while (i < _capturedPoints.Length)
             {
-                if (_condition.ScreenCapturePoints == 0) break;
+                if (_condition.ScreenCapturePoints == 0 || api == null) break;
                 for (int j = 0; j < _condition.ScreenCapturePoints; j++)
                 {
                     updatedIndexes[j] = i;
@@ -118,15 +192,8 @@ namespace HyperTizen
                     int y = (int)(_capturedPoints[i].Y * (double)_condition.Height) - _condition.PixelDensityY / 2;
                     x = (x >= _condition.Width - _condition.PixelDensityX) ? _condition.Width - (_condition.PixelDensityX + 1) : x;
                     y = (y >= _condition.Height - _condition.PixelDensityY) ? (_condition.Height - _condition.PixelDensityY + 1) : y;
-                    int res;
-                    if (!IsTizen7OrHigher)
-                    {
-                        res = MeasurePosition(j, x, y);
-                    } else
-                    {
-                        res = MeasurePosition7(j, x, y);
-                    }
-                  
+                    int res = api.MeasurePosition(j, x, y);
+
                     i++;
                     if (res < 0)
                     {
@@ -139,35 +206,24 @@ namespace HyperTizen
                     Thread.Sleep(_condition.SleepMS);
                 }
                 int k = 0;
+                int failedReads = 0;
                 while (k < _condition.ScreenCapturePoints)
                 {
                     Color color;
 
-                    int res;
+                    int res = api.MeasurePixel(k, out color);
 
-                    if (!IsTizen7OrHigher)
+                    if (res < 0 || color.R > 1023 || color.G > 1023 || color.B > 1023)
                     {
-                        res = MeasurePixel(k, out color);
-                    } else
-                    {
-                        res = MeasurePixel7(k, out color);
-                    }
-
-                    if (res < 0)
-                    {
-                        // This should not happen, handle it.
-                    } else
-                    {
-                        bool invalidColorData = color.R > 1023 || color.G > 1023 || color.B > 1023;
-
-                        if (invalidColorData)
+                        if (++failedReads >= MaxPixelAttempts)
                         {
-                            // This should not happen, handle it.
-                        } else
-                        {
-                            colorData[i - _condition.ScreenCapturePoints + k] = color;
-                            k++;
+                            throw new InvalidOperationException(api.Name + "_get_rgb_measure_pixel gave no valid color for point " + k
+                                + " in " + MaxPixelAttempts + " attempts (last result " + res + ", rgb " + color + ")");
                         }
+                    } else
+                    {
+                        colorData[i - _condition.ScreenCapturePoints + k] = color;
+                        k++;
                     }
                 }
             }
@@ -245,6 +301,8 @@ namespace HyperTizen
         public int R;
         public int G;
         public int B;
+
+        public override string ToString() { return R + "," + G + "," + B; }
     }
 
     public struct Condition

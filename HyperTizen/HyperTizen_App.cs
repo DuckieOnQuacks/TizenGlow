@@ -15,6 +15,7 @@ namespace HyperTizen
             if (!Preference.Contains("enabled")) Preference.Set("enabled", "false");
             Task.Run(() => WebSocketServer.StartServerAsync());
             Display.StateChanged += Display_StateChanged;
+            Capturer.Probe(); // publish detectedApi / captureState even while capture is disabled
             client = new HyperionClient();
         }
 
