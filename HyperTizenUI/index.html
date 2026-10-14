@@ -15,8 +15,18 @@
         <h1>HyperTizen</h1>
         <h3 id="status">Status</h3>
         <a><input type="checkbox" id="enabled"> Enabled</a>
+        <h3 id="currentServer">No HyperHDR server selected</h3>
         <h2 id="ssdpDeviceTitle">SSDP Devices</h2>
         <div id="ssdpItems"></div>
+        <h2>Manual HyperHDR Server</h2>
+        <div id="manualServer">
+            <label for="manualHost">Server IP / hostname</label>
+            <input type="text" id="manualHost" placeholder="e.g. 192.168.1.50" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <label for="manualPort">WebSocket port (HyperHDR web port)</label>
+            <input type="number" id="manualPort" value="8090" min="1" max="65535">
+            <button id="manualSave" onclick="useManualServer()">Use Manual Server</button>
+            <p id="manualStatus"></p>
+        </div>
     </div>
 </body>
 
@@ -41,13 +51,18 @@
                     focusedIndex--;
                 }
             } else if (e.key == 'Enter') {
-                e.preventDefault();
                 const element = elementsArray[focusedIndex];
+                // Text fields keep their native Enter so the TV keyboard (IME) can open.
+                if (element && element.tagName === 'INPUT' && element.type !== 'checkbox') return;
+                e.preventDefault();
                 element.click();
                 if (element.classList.contains('ssdpItem')) {
                     const uri = element.getAttribute('data-uri');
                     setRPC(uri);
                 }
+            } else if (e.keyCode === 65376 || e.keyCode === 65385) {
+                // Samsung IME Done / Cancel: close the keyboard, Up/Down keep navigating from this field.
+                document.activeElement.blur();
             }
         });
 

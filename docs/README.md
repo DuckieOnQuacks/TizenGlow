@@ -25,6 +25,19 @@ If you get `install failed[118, -12], reason: Check certificate error` error, yo
 
 5. Add `reisxd/HyperTizen/HyperTizenUI` as a GitHub module to the module manager. You can access the module manager by pressing the [GREEN] button on the remote.
 
+## Manual HyperHDR server (when SSDP discovery fails)
+
+If the "SSDP Devices" list stays empty (multicast blocked, VLANs, firewall, etc.), you can point HyperTizen at your HyperHDR / Hyperion server directly:
+
+1. Open HyperTizenUI and wait for the status to say `Connected`.
+2. Scroll down to **Manual HyperHDR Server** with the D-pad.
+3. Enter the server's IP address or hostname (e.g. `192.168.1.50`). Press [OK] on the field to open the TV keyboard.
+4. Enter the WebSocket port. This is the HyperHDR / Hyperion **web interface port** (default `8090`), not the FlatBuffers (`19400`) or JSON (`19444`) port.
+5. Select **Use Manual Server**. The UI shows `Currently Connected to ws://HOST:PORT`.
+6. Tick **Enabled**.
+
+This saves the same `rpcServer` setting that selecting an SSDP device does, so it persists across restarts and the SSDP list can still be used at any time.
+
 ## Resigning the package
 
 1. Change the Host PC IP address to your PC's IP address by following [this](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK)

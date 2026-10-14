@@ -21,3 +21,5 @@ HyperTizen is a Hyperion / HyperHDR capturer for Tizen TVs.
 # Getting Started
 
 You can read the [guide](./docs/README.md) to get started with HyperTizen.
+
+If SSDP discovery finds no devices, see [Manual HyperHDR server](./docs/README.md#manual-hyperhdr-server-when-ssdp-discovery-fails).

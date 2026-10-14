@@ -55,8 +55,45 @@ a {
     gap: 1rem
 }
 
-#status {
+#status, #currentServer {
     color: #fff;
     font-size: 30px;
     text-align: center;
+}
+
+#manualServer {
+    display: flex;
+    flex-direction: column;
+    width: 40%;
+    padding: 1rem;
+    gap: 1rem;
+}
+
+#manualServer label, #manualStatus {
+    color: #fff;
+    font-size: 30px;
+}
+
+#manualServer input, #manualServer button {
+    font-size: 40px;
+    padding: 1rem;
+    border: 4px solid transparent;
+    border-radius: 20px;
+}
+
+#manualServer button {
+    background-color: #50505e;
+    color: #fff;
+}
+
+#manualServer input:focus, #manualServer button:focus {
+    border-color: #ff9800;
+    box-shadow: 0 0 20px #ff9800;
+    outline: none;
+}
+
+#manualStatus.error {
+    background-color: #b00020;
+    border-radius: 20px;
+    padding: 1rem;
 }

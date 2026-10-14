@@ -28,7 +28,7 @@ function onOpen() {
     document.getElementById('status').innerHTML = 'Connected';
     document.getElementById('enabled').onchange = (e) => {
         if (!canEnable) {
-            alert('Please select a device first');
+            alert('Please select a device or set a manual server first');
             return e.target.checked = false;
         }
         send({ event: events.SetConfig, key: 'enabled', value: e.target.checked.toString() });
@@ -47,7 +47,7 @@ function onMessage(data) {
         case events.ReadConfigResult:
             if(msg.key === 'rpcServer' && !msg.error) {
                 canEnable = true;
-                document.getElementById('ssdpDeviceTitle').innerText = `SSDP Devices (Currently Connected to ${msg.value})`;
+                showRPC(msg.value);
             } else if(msg.key === 'enabled' && !msg.error) {
                 document.getElementById('enabled').checked = msg.value === 'true';
             }
@@ -75,4 +75,44 @@ function onMessage(data) {
 window.setRPC = (url) =>  {
     canEnable = true;
     send({ event: events.SetConfig, key: 'rpcServer', value: url });
+    showRPC(url);
+}
+
+// Shows the saved server and mirrors it into the manual host/port fields.
+function showRPC(url) {
+    document.getElementById('currentServer').innerText = `Currently Connected to ${url}`;
+    const parsed = parseRPC(url);
+    if (parsed) {
+        document.getElementById('manualHost').value = parsed.host;
+        document.getElementById('manualPort').value = parsed.port;
+    }
+}
+
+// 'ws://host:port' / 'wss://host' -> { host, port }, or null if it doesn't look like one.
+function parseRPC(url) {
+    const match = /^(wss?):\/\/(\[[0-9a-f:.]+\]|[^\/:?#\s]+)(?::(\d+))?/i.exec(url || '');
+    if (!match) return null;
+    return { host: match[2], port: match[3] || (match[1].toLowerCase() === 'wss' ? '443' : '80') };
+}
+
+// Returns { url } or { error }.
+function buildRPC(host, port) {
+    host = String(host).trim();
+    port = String(port).trim();
+    if (!host) return { error: 'Invalid host: enter the HyperHDR IP address or hostname' };
+    if (!/^([a-z0-9.-]+|\[[0-9a-f:.]+\])$/i.test(host)) return { error: `Invalid host: "${host}" (enter only an IP or hostname, no ws:// or port)` };
+    if (!/^\d+$/.test(port) || +port < 1 || +port > 65535) return { error: 'Invalid port: enter a number from 1 to 65535' };
+    return { url: `ws://${host}:${+port}` };
+}
+
+window.useManualServer = () => {
+    const status = document.getElementById('manualStatus');
+    const result = buildRPC(document.getElementById('manualHost').value, document.getElementById('manualPort').value);
+    if (!result.error && (!client || client.readyState !== WebSocket.OPEN)) {
+        result.error = 'Not connected to the HyperTizen service yet, try again in a moment';
+    }
+    status.className = result.error ? 'error' : '';
+    if (result.error) return status.innerText = result.error;
+    setRPC(result.url);
+    status.innerText = `Manual server saved: ${result.url}`;
 }
