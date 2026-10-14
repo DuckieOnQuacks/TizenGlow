@@ -127,7 +127,7 @@ namespace HyperTizen.WebSocket
             {
                 // Live values (an object, see CaptureStats.Snapshot), kept out of Preference so a
                 // running loop doesn't write storage every frame.
-                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, HyperionClient.ReadStats()));
+                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, App.client.ReadStats()));
             }
             else if (!Preference.Contains(readConfigEvent.key))
             {
@@ -189,6 +189,42 @@ namespace HyperTizen.WebSocket
                         Preference.Set("targetFps", HyperionClient.TargetFps.ToString());
                         break;
                     }
+                // WLED Direct. Every value is validated by the output; anything invalid is ignored and not saved.
+                case "outputMode":
+                    {
+                        if (!App.client.TrySetOutput(setConfigEvent.value)) return; // "hyperhdr" or "wled"
+                        break;
+                    }
+                case "wledTarget":
+                    {
+                        if (!App.client.Wled.TrySetTarget(setConfigEvent.value)) return; // "host:port"
+                        break;
+                    }
+                case "ledLayout":
+                    {
+                        if (!App.client.Wled.TrySetLayout(setConfigEvent.value)) return; // see LedLayout.Serialize
+                        break;
+                    }
+                case "wledBrightness":
+                    {
+                        if (!App.client.Wled.TrySetBrightness(setConfigEvent.value)) return; // 0-100 (%)
+                        break;
+                    }
+                case "wledBlackThreshold":
+                    {
+                        if (!App.client.Wled.TrySetBlackThreshold(setConfigEvent.value)) return; // 0-10 (%)
+                        break;
+                    }
+                case "wledSmoothing":
+                    {
+                        if (!App.client.Wled.TrySetSmoothing(setConfigEvent.value)) return; // "on" / "off"
+                        break;
+                    }
+                case "wledTest":
+                    {
+                        App.client.Wled.TryTest(setConfigEvent.value); // red/green/blue/white/off: a command, never saved
+                        return;
+                    }
             }
 
             Preference.Set(setConfigEvent.key, setConfigEvent.value);
@@ -209,6 +245,8 @@ namespace HyperTizen.WebSocket
         private string uri;
         public ClientWebSocket client;
         private byte errorTimes = 0;
+
+        public string Uri { get { return uri; } }
 
         public WebSocketClient(string uri)
         {

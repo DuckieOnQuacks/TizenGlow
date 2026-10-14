@@ -48,6 +48,9 @@ namespace HyperTizen
             new CapturePoint(0.65, 0.5)
         };
         
+        /// <summary>The screen positions sampled each frame (WLED Direct maps LEDs from them).</summary>
+        public static CapturePoint[] CapturePoints { get { return _capturedPoints; } }
+
         /// <summary>Panel size from the last successful condition read, e.g. "3840x2160", else null.</summary>
         public static string Resolution { get { return _api != null ? _condition.Width + "x" + _condition.Height : null; } }
 

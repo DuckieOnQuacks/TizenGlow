@@ -89,6 +89,48 @@ The **Target FPS** button under Capture Quality sets how fast the service captur
 
 Capture, image and send time count toward each frame, so the service only waits for whatever is left of the frame interval. If Capture FPS stays below the target, the TV's capture API is the limit: each frame reads the screen in batches and the firmware asks for a pause (`sleepMs` in Condition) after every batch, so the ceiling is roughly 1000 / ((16 / points) x sleepMs) frames per second.
 
+## WLED Direct (native 1.0.4+)
+
+HyperTizen can drive a [WLED](https://kno.wled.ge/) controller itself, with no HyperHDR and no PC:
+
+```
+TV capture -> 16 edge samples -> LED layout + interpolation -> DDP over UDP -> WLED -> strip
+```
+
+**Output** at the top of HyperTizenUI picks where frames go: **HyperHDR** (the default, unchanged) or **WLED Direct**. Only one is active; switching is safe while capturing and only that output's settings are shown.
+
+### Setup
+
+1. Set **Output** to **WLED Direct**.
+2. Enter the WLED IP (for example `192.168.1.227`) and DDP port **4048**, then **Save WLED Target**.
+3. Press **Test WLED > Red**. Every LED on the strip should turn red for 10 seconds. This works with capture off and uses the same DDP sender as live capture, so if it works, the network path is good.
+4. Under **LED Layout**, enter the number of LEDs on each side of the TV, pick the **Start corner** (where the strip's first LED is) and **Direction** (which way it runs), as seen from the front of the TV, then **Save LED Layout**. Top + Right + Bottom + Left should equal the LED count in WLED's LED Preferences.
+5. Tick **Enabled**.
+
+WLED needs **Receive UDP realtime** on (Config > Sync Interfaces, on by default). If HyperTizen stops sending, WLED returns to its own effect after its realtime timeout (2.5 s by default).
+
+### LED mapping
+
+The layout is one loop clockwise from the top-left corner: top left to right, right top to bottom, bottom right to left, left bottom to top. Each side's LEDs are coloured only from that side's capture points (4 top, 3 right, 4 bottom, 3 left), linearly interpolated by position; LEDs beyond the outermost point on a side take that point's colour. The strip is that loop entered at the start corner and walked in the chosen direction. Test Red and the other test colours fill the whole layout (2048 LEDs if no layout is saved yet; WLED ignores pixels past its strip).
+
+### Picture settings (WLED Direct only)
+
+| Setting | Effect |
+|---|---|
+| Brightness 0-100% | Scales every LED before sending. WLED's own brightness setting is never changed |
+| Black threshold 0-10% | An LED whose red, green and blue are all below this share of full scale is sent as off. Judged before brightness |
+| Smoothing On / Off | Time-based exponential smoothing; the time constant follows Capture Quality: Fast 50 ms, Balanced 90 ms, Smooth 150 ms. Off sends each frame as captured |
+
+HyperHDR output is not affected by these; HyperHDR does its own processing.
+
+### DDP details
+
+Packets follow WLED's receiver (`wled00/e131.cpp`): 10-byte header, version 1, data type RGB 8-bit (`0x0B`), destination 1, a 32-bit byte offset and 16-bit length, PUSH on the last packet of a frame, sequence numbers 1-15. Each packet carries at most 1440 bytes (480 LEDs), the same split WLED's own DDP output uses: 1478 bytes with UDP and IP headers, inside a 1500-byte MTU, so packets are never IP-fragmented. 300 LEDs is one packet per frame, 600 is two, 4000 is nine.
+
+### Status
+
+Native Capture Status shows the output, its target and state (`ready`, `sending`, `testing`, `send error`, `no LED layout`, `not configured`; UDP has no connection, so there is no "connected"), LED count, packets per frame, last send time, DDP frames, packets and errors, and the last output error. A failed send never stops capture: it is counted and retried after 1 second. **Peak sample** is the largest raw value the capture API returned; above 255 means the TV returns more than 8 bits per channel, which both outputs currently clip at 255.
+
 ## Building the package
 
 Requires the [.NET SDK](https://dotnet.microsoft.com/download) (tested with 8.0.426); the `Tizen.NET.Sdk` build SDK is restored from NuGet automatically, so Tizen Studio is not needed to build.

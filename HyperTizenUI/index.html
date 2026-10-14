@@ -15,9 +15,9 @@
         <h1>HyperTizen</h1>
         <h3 id="status">Status</h3>
         <a><input type="checkbox" id="enabled"> Enabled</a>
-        <button id="captureMode" onclick="stepCaptureMode(1, true)">Capture Quality: Fast | <span class="active">Balanced</span> | Smooth</button>
-        <button id="targetFps" onclick="stepTargetFps(1, true)">Target FPS: &lt; 25 &gt;</button>
-        <h3 id="currentServer">No HyperHDR server selected</h3>
+        <button id="outputMode" data-step="stepOutputMode" onclick="stepOutputMode(1, true)">Output: <span class="active">HyperHDR</span> | WLED Direct</button>
+        <button id="captureMode" data-step="stepCaptureMode" onclick="stepCaptureMode(1, true)">Capture Quality: Fast | <span class="active">Balanced</span> | Smooth</button>
+        <button id="targetFps" data-step="stepTargetFps" onclick="stepTargetFps(1, true)">Target FPS: &lt; 25 &gt;</button>
         <div id="captureStatus">
             <h3>Native Capture Status</h3>
             <div id="statsGrid">
@@ -33,75 +33,134 @@
                 <span>Avg frame time</span><span id="statFrameMs">-</span>
                 <span>Failed frames</span><span id="statFailed">-</span>
                 <span>Dropped frames</span><span id="statDropped">-</span>
+                <span>Output</span><span id="statOutput">-</span>
+                <span>Output state</span><span id="statOutputState">-</span>
+                <span>Target</span><span id="statOutputTarget">-</span>
+                <span>Peak sample</span><span id="statPeak">-</span>
+            </div>
+            <div id="wledStatsGrid" class="wledOnly">
+                <span>LED count</span><span id="statLedCount">-</span>
+                <span>Packets/frame</span><span id="statPackets">-</span>
+                <span>Last send time</span><span id="statLastSend">-</span>
+                <span>DDP errors</span><span id="statDdpErrors">-</span>
+                <span>DDP frames sent</span><span id="statDdpFrames">-</span>
+                <span>DDP packets sent</span><span id="statDdpPackets">-</span>
             </div>
             <p>Frame breakdown: <span id="statBreakdown">-</span></p>
             <p>Condition: <span id="captureCondition">-</span></p>
             <p>Last error: <span id="lastCaptureError">-</span></p>
+            <p class="wledOnly">Output error: <span id="statOutputError">-</span></p>
         </div>
-        <h2 id="ssdpDeviceTitle">SSDP Devices</h2>
-        <div id="ssdpItems"></div>
-        <h2>Manual HyperHDR Server</h2>
-        <div id="manualServer">
-            <label for="manualHost">Server IP / hostname</label>
-            <input type="text" id="manualHost" placeholder="e.g. 192.168.1.50" autocomplete="off" autocapitalize="off" spellcheck="false">
-            <label for="manualPort">WebSocket port (HyperHDR web port)</label>
-            <input type="number" id="manualPort" value="8090" min="1" max="65535">
-            <button id="manualSave" onclick="useManualServer()">Use Manual Server</button>
-            <p id="manualStatus"></p>
+
+        <div id="hyperhdrSection" class="hyperhdrOnly">
+            <h3 id="currentServer">No HyperHDR server selected</h3>
+            <h2 id="ssdpDeviceTitle">SSDP Devices</h2>
+            <div id="ssdpItems"></div>
+            <h2>Manual HyperHDR Server</h2>
+            <div id="manualServer" class="form">
+                <label for="manualHost">Server IP / hostname</label>
+                <input type="text" id="manualHost" placeholder="e.g. 192.168.1.50" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label for="manualPort">WebSocket port (HyperHDR web port)</label>
+                <input type="number" id="manualPort" value="8090" min="1" max="65535">
+                <button id="manualSave" onclick="useManualServer()">Use Manual Server</button>
+                <p id="manualStatus"></p>
+            </div>
+        </div>
+
+        <div id="wledSection" class="wledOnly">
+            <h2>WLED Direct</h2>
+            <div class="form">
+                <label for="wledHost">WLED IP / hostname</label>
+                <input type="text" id="wledHost" placeholder="e.g. 192.168.1.227" autocomplete="off" autocapitalize="off" spellcheck="false">
+                <label for="wledPort">DDP port</label>
+                <input type="number" id="wledPort" value="4048" min="1" max="65535">
+                <button id="wledSave" onclick="saveWledTarget()">Save WLED Target</button>
+                <p id="wledStatus"></p>
+            </div>
+
+            <h2>Test WLED</h2>
+            <div class="form">
+                <div class="buttonRow">
+                    <button onclick="testWled('red')">Red</button>
+                    <button onclick="testWled('green')">Green</button>
+                    <button onclick="testWled('blue')">Blue</button>
+                    <button onclick="testWled('white')">White</button>
+                    <button onclick="testWled('off')">Off</button>
+                </div>
+                <p id="testStatus">Fills the whole strip for 10 s through the same DDP sender, even with capture off.</p>
+            </div>
+
+            <h2>LED Layout</h2>
+            <div class="form">
+                <label for="ledTop">Top LEDs</label>
+                <input type="number" id="ledTop" min="0" max="2000">
+                <label for="ledRight">Right LEDs</label>
+                <input type="number" id="ledRight" min="0" max="2000">
+                <label for="ledBottom">Bottom LEDs</label>
+                <input type="number" id="ledBottom" min="0" max="2000">
+                <label for="ledLeft">Left LEDs</label>
+                <input type="number" id="ledLeft" min="0" max="2000">
+                <p>Total: <span id="ledTotal">0</span> LEDs</p>
+                <button id="ledStart" data-step="stepLedStart" onclick="stepLedStart(1, true)">Start corner: &lt; Top Left &gt;</button>
+                <button id="ledDirection" data-step="stepLedDirection" onclick="stepLedDirection(1, true)">Direction: &lt; Clockwise &gt;</button>
+                <button id="layoutSave" onclick="saveLedLayout()">Save LED Layout</button>
+                <p id="layoutStatus">Start corner and direction are where the strip's first LED sits and which way it runs, seen from the front of the TV.</p>
+            </div>
+
+            <h2>Picture</h2>
+            <div class="form">
+                <button id="wledBrightness" data-step="stepBrightness" onclick="stepBrightness(1, true)">Brightness: &lt; 100% &gt;</button>
+                <button id="wledBlackThreshold" data-step="stepBlackThreshold" onclick="stepBlackThreshold(1, true)">Black threshold: &lt; 0% &gt;</button>
+                <button id="wledSmoothing" data-step="stepSmoothing" onclick="stepSmoothing(1, true)">Smoothing: &lt; On &gt;</button>
+                <p>Smoothing follows Capture Quality: Fast 50 ms, Balanced 90 ms, Smooth 150 ms.</p>
+            </div>
         </div>
     </div>
 </body>
 
 <script>
     window.onload = function () {
-        let elements = document.querySelectorAll('button, input, [tabindex]');
-        let elementsArray = Array.prototype.slice.call(elements);
-        let focusedElement = document.activeElement;
-        let focusedIndex = elementsArray.indexOf(focusedElement);
+        // Visible controls in page order: the inactive output's section is hidden and skipped.
+        const focusables = () => Array.prototype.filter.call(
+            document.querySelectorAll('button, input, [tabindex]'), e => e.offsetParent !== null);
+        // After the TV keyboard closes the field loses focus; keep navigating from where it was.
+        let lastFocused = null;
+        document.addEventListener('focusin', e => { lastFocused = e.target; });
 
         document.addEventListener('keydown', function (e) {
+            const list = focusables();
+            let index = list.indexOf(document.activeElement);
+            if (index === -1) index = list.indexOf(lastFocused);
+            const element = list[index];
+
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (focusedIndex < elementsArray.length - 1) {
-                    elementsArray[focusedIndex + 1].focus();
-                    focusedIndex++;
-                }
+                if (index < list.length - 1) list[index + 1].focus();
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                if (focusedIndex > 0) {
-                    elementsArray[focusedIndex - 1].focus();
-                    focusedIndex--;
-                }
+                if (index > 0) list[index - 1].focus();
             } else if (e.key == 'Enter') {
-                const element = elementsArray[focusedIndex];
                 // Text fields keep their native Enter so the TV keyboard (IME) can open.
-                if (element && element.tagName === 'INPUT' && element.type !== 'checkbox') return;
+                if (!element || (element.tagName === 'INPUT' && element.type !== 'checkbox')) return;
                 e.preventDefault();
                 element.click();
                 if (element.classList.contains('ssdpItem')) {
                     const uri = element.getAttribute('data-uri');
                     setRPC(uri);
                 }
-            } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && (document.activeElement.id === 'targetFps' || document.activeElement.id === 'captureMode')) {
+            } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && element && element.dataset.step) {
+                // Selectors step down / up with Left / Right; OK cycles.
                 e.preventDefault();
-                (document.activeElement.id === 'targetFps' ? stepTargetFps : stepCaptureMode)(e.key === 'ArrowRight' ? 1 : -1);
+                window[element.dataset.step](e.key === 'ArrowRight' ? 1 : -1);
             } else if (e.keyCode === 65376 || e.keyCode === 65385) {
                 // Samsung IME Done / Cancel: close the keyboard, Up/Down keep navigating from this field.
                 document.activeElement.blur();
             }
         });
 
-        const observer = new MutationObserver(function (mutations) {
-            mutations.forEach(function (mutation) {
-                if (mutation.addedNodes.length > 0) {
-                    elements = document.querySelectorAll('button, input, [tabindex]');
-                    elementsArray = Array.prototype.slice.call(elements);
-                    focusedIndex = elementsArray.indexOf(document.activeElement);
-                }
-            });
-        });
+        for (const id of ['ledTop', 'ledRight', 'ledBottom', 'ledLeft']) document.getElementById(id).addEventListener('input', showLedTotal);
+        showOutputMode('hyperhdr');
 
-        observer.observe(document.body, { childList: true, subtree: true });
         fetch('http://127.0.0.1:8081').then(res => res.text()).then(ip => {
             deviceIP = ip;
 

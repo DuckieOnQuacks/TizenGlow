@@ -18,6 +18,7 @@ namespace HyperTizen
         {
             public double EndMs, CaptureMs, ImageMs, SendMs, WaitMs, FrameMs;
             public bool Sent;
+            public int Peak;
         }
 
         private readonly Queue<Frame> _frames = new Queue<Frame>();
@@ -56,14 +57,18 @@ namespace HyperTizen
             }
         }
 
-        /// <summary>A frame that came back from the capture API. Times in ms; frameMs is the whole loop iteration including the pacing wait.</summary>
-        public void AddFrame(int epoch, double captureMs, double imageMs, double sendMs, double waitMs, double frameMs, bool sent)
+        /// <summary>
+        /// A frame that came back from the capture API. Times in ms; imageMs is the output's prepare step
+        /// (PNG for HyperHDR, LED mapping for WLED); frameMs is the whole iteration including the pacing wait.
+        /// peak is the largest raw channel value among the samples (-1 if unknown).
+        /// </summary>
+        public void AddFrame(int epoch, double captureMs, double imageMs, double sendMs, double waitMs, double frameMs, bool sent, int peak = -1)
         {
             lock (_lock)
             {
                 if (epoch != _epoch) return;
                 double now = _clock();
-                _frames.Enqueue(new Frame { EndMs = now, CaptureMs = captureMs, ImageMs = imageMs, SendMs = sendMs, WaitMs = waitMs, FrameMs = frameMs, Sent = sent });
+                _frames.Enqueue(new Frame { EndMs = now, CaptureMs = captureMs, ImageMs = imageMs, SendMs = sendMs, WaitMs = waitMs, FrameMs = frameMs, Sent = sent, Peak = peak });
                 Trim(now);
             }
         }
@@ -97,11 +102,12 @@ namespace HyperTizen
                 };
                 if (span < MinSpanMs) return s;
 
-                int n = _frames.Count, sent = 0;
+                int n = _frames.Count, sent = 0, peak = -1;
                 double capture = 0, image = 0, send = 0, wait = 0, frame = 0;
                 foreach (Frame f in _frames)
                 {
                     if (f.Sent) sent++;
+                    if (f.Peak > peak) peak = f.Peak;
                     capture += f.CaptureMs; image += f.ImageMs; send += f.SendMs; wait += f.WaitMs; frame += f.FrameMs;
                 }
 
@@ -115,6 +121,7 @@ namespace HyperTizen
                     s.averageSendMs = Math.Round(send / n, 1);
                     s.averageWaitMs = Math.Round(wait / n, 1);
                     s.averageFrameMs = Math.Round(frame / n, 1);
+                    if (peak >= 0) s.peakSample = peak;
                 }
 
                 if (span >= WindowMs)
@@ -150,6 +157,21 @@ namespace HyperTizen
             public long failedFrames;
             public long droppedFrames;
             public double windowMs;
+
+            /// <summary>Largest raw sample channel value in the window. Over 255 means the capture API returns more than 8 bits (both outputs clamp at 255).</summary>
+            public int? peakSample;
+
+            // Active output, filled by HyperionClient / the output.
+            public string output;
+            public string outputTarget;
+            public string outputState;
+            public string outputError;
+            public int? ledCount;
+            public int? packetsPerFrame;
+            public double? lastSendMs;
+            public long? ddpFramesSent;
+            public long? ddpPacketsSent;
+            public long? ddpSendErrors;
         }
     }
 }

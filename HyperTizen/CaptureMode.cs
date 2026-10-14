@@ -3,7 +3,7 @@ namespace HyperTizen
     /// <summary>
     /// User-facing capture presets. Each sets only parameters the capture loop really has; sampling
     /// density is not one of them (16 fixed points, batched by the firmware's ScreenCapturePoints, mapped
-    /// one-to-one onto ToImage's border strips), and LED smoothing stays with HyperHDR.
+    /// one-to-one onto ToImage's border strips). Colour smoothing applies only to WLED Direct; HyperHDR smooths its own.
     /// </summary>
     public sealed class CaptureMode
     {
@@ -27,9 +27,15 @@ namespace HyperTizen
         /// <summary>Retry interval while the capture API exists but its condition read fails.</summary>
         public int ConditionRetryMs;
 
-        public static readonly CaptureMode Fast = new CaptureMode { Name = "fast", Label = "Fast", TargetFps = 30, KeepFrameGrid = false, ErrorBackoffMs = 1000, ConditionRetryMs = 5000 };
-        public static readonly CaptureMode Balanced = new CaptureMode { Name = "balanced", Label = "Balanced", TargetFps = 25, KeepFrameGrid = false, ErrorBackoffMs = 5000, ConditionRetryMs = 10000 };
-        public static readonly CaptureMode Smooth = new CaptureMode { Name = "smooth", Label = "Smooth", TargetFps = 15, KeepFrameGrid = true, ErrorBackoffMs = 5000, ConditionRetryMs = 10000 };
+        /// <summary>
+        /// WLED Direct smoothing time constant when its Smoothing setting is on (time to cover ~63% of a
+        /// colour change). HyperHDR output is never smoothed here; HyperHDR does its own.
+        /// </summary>
+        public int SmoothingMs;
+
+        public static readonly CaptureMode Fast = new CaptureMode { Name = "fast", Label = "Fast", TargetFps = 30, KeepFrameGrid = false, ErrorBackoffMs = 1000, ConditionRetryMs = 5000, SmoothingMs = 50 };
+        public static readonly CaptureMode Balanced = new CaptureMode { Name = "balanced", Label = "Balanced", TargetFps = 25, KeepFrameGrid = false, ErrorBackoffMs = 5000, ConditionRetryMs = 10000, SmoothingMs = 90 };
+        public static readonly CaptureMode Smooth = new CaptureMode { Name = "smooth", Label = "Smooth", TargetFps = 15, KeepFrameGrid = true, ErrorBackoffMs = 5000, ConditionRetryMs = 10000, SmoothingMs = 150 };
 
         public static readonly CaptureMode[] All = { Fast, Balanced, Smooth };
 

@@ -27,8 +27,8 @@ function send(json) {
 function onOpen() {
     document.getElementById('status').innerHTML = 'Connected';
     document.getElementById('enabled').onchange = (e) => {
-        if (!canEnable) {
-            alert('Please select a device or set a manual server first');
+        if (outputSel.value === 'wled' ? !wledReady : !canEnable) {
+            alert(outputSel.value === 'wled' ? 'Please save a WLED target first' : 'Please select a device or set a manual server first');
             return e.target.checked = false;
         }
         send({ event: events.SetConfig, key: 'enabled', value: e.target.checked.toString() });
@@ -38,6 +38,7 @@ function onOpen() {
     send({ event: events.ScanSSDP });
     send({ event: events.ReadConfig, key: 'captureMode' });
     send({ event: events.ReadConfig, key: 'targetFps' });
+    for (const key of wledKeys) send({ event: events.ReadConfig, key });
     readCaptureStatus();
     // One timer each, however often this runs.
     clearInterval(ssdpTimer);
@@ -98,6 +99,135 @@ window.stepCaptureMode = (step, wrap) => {
     send({ event: events.ReadConfig, key: 'targetFps' });
 }
 
+// One-button selector: OK cycles (wrapping), Left/Right step. With a key the choice is sent at once;
+// without one it stays local until saved (LED layout). Labels come from fixed lists only.
+function makeSelector(id, values, initial, render, key, after) {
+    const sel = { value: initial };
+    sel.show = v => {
+        sel.value = values.indexOf(v) !== -1 ? v : initial;
+        document.getElementById(id).innerHTML = render(sel.value);
+        if (after) after(sel.value);
+    };
+    sel.step = (step, wrap) => {
+        if (key && !connected()) return;
+        const next = stepIn(values, sel.value, step, wrap);
+        if (next === sel.value) return;
+        sel.show(next);
+        if (key) send({ event: events.SetConfig, key, value: String(next) });
+    };
+    return sel;
+}
+
+const options = (labels, value) => Object.keys(labels).map(k => k === value ? `<span class="active">${labels[k]}</span>` : labels[k]).join(' | ');
+
+// Output: HyperHDR (default, as before) or WLED Direct. Only the active one's settings are shown.
+const outputLabels = { hyperhdr: 'HyperHDR', wled: 'WLED Direct' };
+const outputSel = makeSelector('outputMode', Object.keys(outputLabels), 'hyperhdr', v => 'Output: ' + options(outputLabels, v), 'outputMode',
+    v => { document.body.className = 'output-' + v; });
+window.stepOutputMode = outputSel.step;
+function showOutputMode(mode) { outputSel.show(mode); }
+
+// WLED Direct picture settings, sent as soon as they change.
+const brightnessSel = makeSelector('wledBrightness', [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], 100, v => `Brightness: &lt; ${v}% &gt;`, 'wledBrightness');
+const thresholdSel = makeSelector('wledBlackThreshold', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0, v => `Black threshold: &lt; ${v}% &gt;`, 'wledBlackThreshold');
+const smoothingSel = makeSelector('wledSmoothing', ['on', 'off'], 'on', v => `Smoothing: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'wledSmoothing');
+window.stepBrightness = brightnessSel.step;
+window.stepBlackThreshold = thresholdSel.step;
+window.stepSmoothing = smoothingSel.step;
+
+// LED layout: start corner and direction are saved together with the counts.
+const cornerLabels = { topleft: 'Top Left', topright: 'Top Right', bottomright: 'Bottom Right', bottomleft: 'Bottom Left' };
+const directionLabels = { cw: 'Clockwise', ccw: 'Counter-clockwise' };
+const cornerSel = makeSelector('ledStart', Object.keys(cornerLabels), 'topleft', v => `Start corner: &lt; ${cornerLabels[v]} &gt;`);
+const directionSel = makeSelector('ledDirection', Object.keys(directionLabels), 'cw', v => `Direction: &lt; ${directionLabels[v]} &gt;`);
+window.stepLedStart = cornerSel.step;
+window.stepLedDirection = directionSel.step;
+
+const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing'];
+const ledSides = ['ledTop', 'ledRight', 'ledBottom', 'ledLeft'];
+let wledReady = false;
+
+function showStatus(id, text, isError) {
+    const element = document.getElementById(id);
+    element.className = isError ? 'error' : '';
+    element.textContent = text;
+}
+
+// Returns { host, port } or { error }. WLED is IPv4 / hostname only.
+function checkWledTarget(host, port) {
+    host = String(host).trim();
+    port = String(port).trim();
+    if (!host) return { error: 'Invalid WLED host: enter its IP address or hostname' };
+    if (!/^[a-z0-9.-]+$/i.test(host)) return { error: `Invalid WLED host: "${host}" (IP or hostname only)` };
+    if (!/^\d+$/.test(port) || +port < 1 || +port > 65535) return { error: 'Invalid DDP port: enter a number from 1 to 65535 (WLED uses 4048)' };
+    return { host, port: +port };
+}
+
+window.saveWledTarget = () => {
+    const result = checkWledTarget(document.getElementById('wledHost').value, document.getElementById('wledPort').value);
+    if (!result.error && !connected()) result.error = 'Not connected to the HyperTizen service yet, try again in a moment';
+    if (result.error) return showStatus('wledStatus', result.error, true);
+    send({ event: events.SetConfig, key: 'wledTarget', value: `${result.host}:${result.port}` });
+    wledReady = true;
+    showStatus('wledStatus', `WLED target saved: ${result.host}:${result.port}`);
+}
+
+function showWledTarget(value) {
+    const colon = value.lastIndexOf(':');
+    if (colon <= 0) return;
+    document.getElementById('wledHost').value = value.slice(0, colon);
+    document.getElementById('wledPort').value = value.slice(colon + 1);
+    wledReady = true;
+}
+
+// Counts as typed: empty is 0, anything else must be a whole number 0-2000. Returns { counts } or { error }.
+function readLedCounts() {
+    const counts = [];
+    for (const id of ledSides) {
+        const text = String(document.getElementById(id).value).trim();
+        if (text !== '' && !/^\d+$/.test(text)) return { error: 'LED counts must be whole numbers' };
+        const n = text === '' ? 0 : +text;
+        if (n > 2000) return { error: 'At most 2000 LEDs per side' };
+        counts.push(n);
+    }
+    if (counts[0] + counts[1] + counts[2] + counts[3] === 0) return { error: 'Enter at least one LED (top + right + bottom + left must be more than 0)' };
+    return { counts };
+}
+
+function showLedTotal() {
+    let total = 0;
+    for (const id of ledSides) total += Math.max(0, parseInt(document.getElementById(id).value, 10) || 0);
+    setText('ledTotal', String(total));
+}
+
+window.saveLedLayout = () => {
+    const result = readLedCounts();
+    if (!result.error && !connected()) result.error = 'Not connected to the HyperTizen service yet, try again in a moment';
+    if (result.error) return showStatus('layoutStatus', result.error, true);
+    const c = result.counts;
+    send({ event: events.SetConfig, key: 'ledLayout', value: `${c.join(',')},${cornerSel.value},${directionSel.value}` });
+    showStatus('layoutStatus', `LED layout saved: ${c[0] + c[1] + c[2] + c[3]} LEDs from ${cornerLabels[cornerSel.value]}, ${directionLabels[directionSel.value].toLowerCase()}`);
+}
+
+function showLedLayout(value) {
+    const parts = value.split(',');
+    if (parts.length !== 6) return;
+    ledSides.forEach((id, i) => { document.getElementById(id).value = parts[i]; });
+    cornerSel.show(parts[4]);
+    directionSel.show(parts[5]);
+    showLedTotal();
+}
+
+const testLabels = { red: 'Red', green: 'Green', blue: 'Blue', white: 'White', off: 'Off' };
+
+// Whole-strip DDP test pattern; works with capture off.
+window.testWled = color => {
+    if (!connected()) return showStatus('testStatus', 'Not connected to the HyperTizen service yet', true);
+    if (!wledReady) return showStatus('testStatus', 'Save a WLED target first', true);
+    send({ event: events.SetConfig, key: 'wledTest', value: color });
+    showStatus('testStatus', `${testLabels[color]} sent to WLED for 10 s`);
+}
+
 // Written by the native service (Capturer.cs) as preferences; read back with ReadConfig.
 const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
 
@@ -106,7 +236,7 @@ function readCaptureStatus() {
     send({ event: events.ReadConfig, key: 'captureStats' });
 }
 
-// Only touch the DOM on change: every mutation makes index.html rebuild its D-pad focus list.
+// Only touch the DOM on change; status is refreshed every second.
 function setText(id, text) {
     const element = document.getElementById(id);
     if (element.textContent !== text) element.textContent = text;
@@ -133,7 +263,21 @@ function showCaptureStats(msg) {
     setText('statFailed', s ? String(s.failedFrames) : '-');
     setText('statDropped', s ? String(s.droppedFrames) : '-');
     setText('statBreakdown', !s || s.averageFrameMs === null ? '-'
-        : `capture ${num(s.averageCaptureMs)} + image ${num(s.averageImageMs)} + send ${num(s.averageSendMs)} + wait ${num(s.averageWaitMs)} ms`);
+        : `capture ${num(s.averageCaptureMs)} + prepare ${num(s.averageImageMs)} + send ${num(s.averageSendMs)} + wait ${num(s.averageWaitMs)} ms`);
+
+    // Output (native 1.0.4+). The WLED rows are only shown in WLED Direct mode.
+    const has = v => s && v !== null && v !== undefined;
+    setText('statOutput', has(s && s.output) ? s.output : '-');
+    setText('statOutputState', has(s && s.outputState) ? s.outputState : '-');
+    setText('statOutputTarget', has(s && s.outputTarget) ? s.outputTarget : '-');
+    setText('statPeak', !has(s && s.peakSample) ? '-' : s.peakSample > 255 ? `${s.peakSample} (above 8-bit, clipped at 255)` : String(s.peakSample));
+    setText('statLedCount', !s ? '-' : has(s.ledCount) ? String(s.ledCount) : 'no layout saved');
+    setText('statPackets', has(s && s.packetsPerFrame) ? String(s.packetsPerFrame) : '-');
+    setText('statLastSend', has(s && s.lastSendMs) ? `${s.lastSendMs.toFixed(2)} ms` : '-');
+    setText('statDdpErrors', has(s && s.ddpSendErrors) ? String(s.ddpSendErrors) : '-');
+    setText('statDdpFrames', has(s && s.ddpFramesSent) ? String(s.ddpFramesSent) : '-');
+    setText('statDdpPackets', has(s && s.ddpPacketsSent) ? String(s.ddpPacketsSent) : '-');
+    setText('statOutputError', !s ? '-' : s.outputError || 'none');
 }
 
 function onMessage(data) {
@@ -149,6 +293,18 @@ function onMessage(data) {
                 showTargetFps(msg.error ? 25 : Number(msg.value));
             } else if (msg.key === 'captureMode') {
                 showCaptureMode(msg.error ? 'balanced' : msg.value);
+            } else if (msg.key === 'outputMode') {
+                showOutputMode(msg.error ? 'hyperhdr' : msg.value);
+            } else if (msg.key === 'wledTarget') {
+                if (!msg.error) showWledTarget(msg.value);
+            } else if (msg.key === 'ledLayout') {
+                if (!msg.error) showLedLayout(msg.value);
+            } else if (msg.key === 'wledBrightness') {
+                brightnessSel.show(msg.error ? 100 : Number(msg.value));
+            } else if (msg.key === 'wledBlackThreshold') {
+                thresholdSel.show(msg.error ? 0 : Number(msg.value));
+            } else if (msg.key === 'wledSmoothing') {
+                smoothingSel.show(msg.error ? 'on' : msg.value);
             } else if (msg.key === 'captureStats') {
                 showCaptureStats(msg);
             } else if (captureStatusKeys.indexOf(msg.key) !== -1) {

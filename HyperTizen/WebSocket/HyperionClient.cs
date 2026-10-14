@@ -1,29 +1,26 @@
-using Newtonsoft.Json;
 using System.Threading.Tasks;
 using Tizen.Applications;
-using HyperTizen.WebSocket.DataTypes;
-using System.Net.WebSockets;
-using System.Text;
+using HyperTizen.Wled;
 using System;
 using System.Globalization;
 using System.Threading;
 
 namespace HyperTizen.WebSocket
 {
+    /// <summary>
+    /// Owns the single capture loop. Each frame is captured once and handed to the active output:
+    /// HyperHDR (HyperHdrOutput) or WLED Direct (WledOutput).
+    /// </summary>
     internal class HyperionClient
     {
-        WebSocketClient client;
         private int _loopRunning;
-        private DateTime _lastReconnect = DateTime.MinValue;
-
-        internal static TimeSpan ReconnectInterval = TimeSpan.FromSeconds(5);
 
         // The presets HyperTizenUI offers; anything else sent as "targetFps" is ignored.
         public static readonly int[] FpsPresets = { 10, 15, 20, 25, 30, 40 };
         private static volatile CaptureMode _mode = CaptureMode.Balanced;
         private static volatile int _targetFps = CaptureMode.Balanced.TargetFps;
 
-        /// <summary>Live performance numbers; reset when capture starts and when the mode or target FPS changes.</summary>
+        /// <summary>Live performance numbers; reset when capture starts and when the mode, target FPS or output changes.</summary>
         public static readonly CaptureStats Stats = new CaptureStats();
 
         /// <summary>Both are read by the loop every frame, so changes apply without a restart.</summary>
@@ -50,47 +47,68 @@ namespace HyperTizen.WebSocket
             return true;
         }
 
-        public static CaptureStats.Snapshot ReadStats()
-        {
-            CaptureStats.Snapshot s = Stats.Read(_targetFps);
-            s.mode = _mode.Label;
-            s.resolution = Capturer.Resolution;
-            return s;
-        }
+        public readonly HyperHdrOutput HyperHdr;
+        public readonly WledOutput Wled;
+        private volatile IFrameOutput _output;
+
+        /// <summary>Stored as "outputMode": "hyperhdr" (default, so upgrades keep their behaviour) or "wled".</summary>
+        public string OutputName { get { return _output == Wled ? "wled" : "hyperhdr"; } }
 
         public HyperionClient()
         {
             // Mode first: it sets its own target FPS, which a saved targetFps then fine-tunes.
             if (Preference.Contains("captureMode")) TrySetMode(Preference.Get<string>("captureMode"));
             if (Preference.Contains("targetFps")) TrySetTargetFps(Preference.Get<string>("targetFps"));
-            if (!Preference.Contains("rpcServer")) return;
-            client = new WebSocketClient(Preference.Get<string>("rpcServer"));
-            Task.Run(() => client.ConnectAsync());
+
+            HyperHdr = new HyperHdrOutput(Preference.Contains("rpcServer") ? Preference.Get<string>("rpcServer") : null);
+            Wled = new WledOutput(() => _mode.SmoothingMs);
+            if (Preference.Contains("wledTarget")) Wled.TrySetTarget(Preference.Get<string>("wledTarget"));
+            if (Preference.Contains("ledLayout")) Wled.TrySetLayout(Preference.Get<string>("ledLayout"));
+            if (Preference.Contains("wledBrightness")) Wled.TrySetBrightness(Preference.Get<string>("wledBrightness"));
+            if (Preference.Contains("wledBlackThreshold")) Wled.TrySetBlackThreshold(Preference.Get<string>("wledBlackThreshold"));
+            if (Preference.Contains("wledSmoothing")) Wled.TrySetSmoothing(Preference.Get<string>("wledSmoothing"));
+            _output = Preference.Contains("outputMode") && Preference.Get<string>("outputMode") == "wled" ? (IFrameOutput)Wled : HyperHdr;
+
             Task.Run(() => Start());
         }
 
         public void UpdateURI(string uri)
         {
-            WebSocketClient old = client;
-            WebSocketClient fresh = new WebSocketClient(uri);
-
-            // Publish the new client before tearing the old one down, so a running loop
-            // picks up the replacement instead of sending on a socket being disposed.
-            client = fresh;
-            Task.Run(async () =>
-            {
-                try { old?.client?.Abort(); } catch { }
-                await fresh.ConnectAsync();
-            });
+            HyperHdr.UpdateUri(uri);
 
             // A loop that exited with "no-server" (nothing saved yet) needs starting now.
             if (App.Configuration.Enabled) Task.Run(() => Start());
         }
 
+        /// <summary>Picks the output for the next frame; the running loop keeps going. Counters start over.</summary>
+        public bool TrySetOutput(string name)
+        {
+            IFrameOutput output = name == "wled" ? (IFrameOutput)Wled : name == "hyperhdr" ? HyperHdr : null;
+            if (output == null) return false;
+            output.Reset();
+            _output = output;
+            Stats.Reset();
+            if (App.Configuration.Enabled) Task.Run(() => Start());
+            return true;
+        }
+
+        public CaptureStats.Snapshot ReadStats()
+        {
+            CaptureStats.Snapshot s = Stats.Read(_targetFps);
+            IFrameOutput output = _output;
+            s.mode = _mode.Label;
+            s.resolution = Capturer.Resolution;
+            s.output = output.Label;
+            s.outputTarget = output.Target;
+            s.outputState = output.State;
+            if (output == Wled) Wled.Describe(s);
+            return s;
+        }
+
         public async Task Start()
         {
-            // Exactly one capture loop. The display handler, UpdateURI and the UI's "enabled"
-            // all call Start, and stacked loops would fight over the capture API and socket.
+            // Exactly one capture loop. The display handler, UpdateURI, the output switch and the
+            // UI's "enabled" all call Start, and stacked loops would fight over the capture API.
             if (Interlocked.Exchange(ref _loopRunning, 1) == 1) return;
             try { await RunAsync(); }
             catch (Exception e) { Capturer.ReportError("capture loop", e); }
@@ -100,7 +118,7 @@ namespace HyperTizen.WebSocket
         private async Task RunAsync()
         {
             if (!App.Configuration.Enabled) return;
-            if (client == null)
+            if (!_output.Configured)
             {
                 Capturer.SetState("no-server");
                 return;
@@ -126,14 +144,16 @@ namespace HyperTizen.WebSocket
             {
                 int epoch = Stats.Epoch;
                 CaptureMode mode = _mode;
-                double start = Stats.Now(), captured, imaged;
-                string image;
+                IFrameOutput output = _output;
+                double start = Stats.Now(), captured, prepared;
+                int peak = 0;
                 try
                 {
                     Color[] colors = Capturer.GetColors();
                     captured = Stats.Now();
-                    image = Capturer.ToImage(colors);
-                    imaged = Stats.Now();
+                    foreach (Color c in colors) peak = Math.Max(peak, Math.Max(c.R, Math.Max(c.G, c.B)));
+                    output.Prepare(colors);
+                    prepared = Stats.Now();
                 }
                 catch (Exception e)
                 {
@@ -146,10 +166,10 @@ namespace HyperTizen.WebSocket
 
                 // Only a frame that actually came back from the capture API counts as running.
                 Capturer.SetState("running");
-                bool sent = await SendAsync(image);
+                bool sent = await output.SendAsync();
                 double worked = Stats.Now();
 
-                // Pace against a deadline instead of sleeping a fixed time: capture, image and send
+                // Pace against a deadline instead of sleeping a fixed time: capture, prepare and send
                 // time count toward the frame, and a timer that wakes late shortens the next wait.
                 double interval = 1000.0 / _targetFps;
                 nextFrameMs += interval;
@@ -174,49 +194,18 @@ namespace HyperTizen.WebSocket
                 if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait));
 
                 double end = Stats.Now();
-                Stats.AddFrame(epoch, captured - start, imaged - captured, worked - imaged, end - worked, end - start, sent);
+                Stats.AddFrame(epoch, captured - start, prepared - captured, worked - prepared, end - worked, end - start, sent, peak);
             }
             Capturer.SetState("stopped");
         }
 
-        /// <summary>True when HyperHDR got the frame.</summary>
-        private async Task<bool> SendAsync(string image)
-        {
-            WebSocketClient c = client;
-            if (c.client.State == WebSocketState.Open)
-            {
-                try
-                {
-                    var buffer = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new ImageCommand(image)));
-                    await c.client.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
-                    return true;
-                }
-                catch (Exception) { } // dropped mid-send: the socket is no longer Open, so the next frame redials
-            }
-            else if (DateTime.UtcNow - _lastReconnect >= ReconnectInterval)
-            {
-                // Nothing else redials a dropped socket, which left HyperHDR holding a frozen
-                // frame. The frame loop doubles as the watchdog; dialing runs in the background
-                // so a slow connect never stalls capture.
-                _lastReconnect = DateTime.UtcNow;
-                _ = c.ReconnectAsync();
-            }
-            return false;
-        }
-
+        /// <summary>Display turned off: stop capturing and send one last frame through the active output.</summary>
         public async Task Stop()
         {
             if (App.Configuration.Enabled) App.Configuration.Enabled = false;
-            Color[] colors = Capturer.GetColors();
-            string image = Capturer.ToImage(colors);
-
-            if (client?.client?.State == WebSocketState.Open)
-            {
-                ImageCommand imgCmd = new ImageCommand(image);
-                string message = JsonConvert.SerializeObject(imgCmd);
-                var buffer = Encoding.UTF8.GetBytes(message);
-                await client.client.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
-            }
+            IFrameOutput output = _output;
+            output.Prepare(Capturer.GetColors());
+            await output.SendAsync();
         }
     }
 }
