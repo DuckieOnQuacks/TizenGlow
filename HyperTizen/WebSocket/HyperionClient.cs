@@ -6,6 +6,7 @@ using System.Net.WebSockets;
 using System.Text;
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading;
 
 namespace HyperTizen.WebSocket
@@ -16,13 +17,33 @@ namespace HyperTizen.WebSocket
         private int _loopRunning;
         private DateTime _lastReconnect = DateTime.MinValue;
 
-        private const int FrameMs = 40; // ~25 fps cap; the loop used to spin with no delay at all
         internal static int ConditionRetryMs = 10000;
         internal static int ErrorBackoffMs = 5000;
         internal static TimeSpan ReconnectInterval = TimeSpan.FromSeconds(5);
 
+        // The presets HyperTizenUI offers; anything else sent as "targetFps" is ignored.
+        public static readonly int[] FpsPresets = { 10, 15, 20, 25, 30, 40 };
+        public const int DefaultFps = 25;
+        private static volatile int _targetFps = DefaultFps;
+        private static volatile string _measuredFps = "0.0";
+
+        /// <summary>Frames per second the loop paces to; read every frame, so changes apply at once.</summary>
+        public static int TargetFps { get { return _targetFps; } }
+
+        /// <summary>Captured frames per second over the last second, "0.0" while not capturing.</summary>
+        public static string MeasuredFps { get { return _measuredFps; } }
+
+        public static bool TrySetTargetFps(string value)
+        {
+            int fps;
+            if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out fps) || Array.IndexOf(FpsPresets, fps) < 0) return false;
+            _targetFps = fps;
+            return true;
+        }
+
         public HyperionClient()
         {
+            if (Preference.Contains("targetFps")) TrySetTargetFps(Preference.Get<string>("targetFps"));
             if (!Preference.Contains("rpcServer")) return;
             client = new WebSocketClient(Preference.Get<string>("rpcServer"));
             Task.Run(() => client.ConnectAsync());
@@ -80,10 +101,12 @@ namespace HyperTizen.WebSocket
                 }
             }
 
-            var frame = new Stopwatch();
+            var clock = Stopwatch.StartNew();
+            double nextFrameMs = 0;
+            double windowStartMs = 0;
+            int windowFrames = 0;
             while (App.Configuration.Enabled)
             {
-                frame.Restart();
                 string image;
                 try
                 {
@@ -92,7 +115,10 @@ namespace HyperTizen.WebSocket
                 catch (Exception e)
                 {
                     Capturer.ReportError("frame capture", e);
+                    _measuredFps = "0.0";
                     await Task.Delay(ErrorBackoffMs);
+                    nextFrameMs = windowStartMs = clock.Elapsed.TotalMilliseconds;
+                    windowFrames = 0;
                     continue;
                 }
 
@@ -100,9 +126,24 @@ namespace HyperTizen.WebSocket
                 Capturer.SetState("running");
                 await SendAsync(image);
 
-                int wait = FrameMs - (int)frame.ElapsedMilliseconds;
-                if (wait > 0) await Task.Delay(wait);
+                double now = clock.Elapsed.TotalMilliseconds;
+                windowFrames++;
+                if (now - windowStartMs >= 1000)
+                {
+                    _measuredFps = (windowFrames * 1000 / (now - windowStartMs)).ToString("0.0", CultureInfo.InvariantCulture);
+                    windowStartMs = now;
+                    windowFrames = 0;
+                }
+
+                // Pace against a deadline instead of sleeping a fixed time: capture and send time
+                // count toward the frame, and a timer that wakes late shortens the next wait. A frame
+                // that overran starts the next one immediately rather than bursting to catch up.
+                nextFrameMs += 1000.0 / _targetFps;
+                double wait = nextFrameMs - now;
+                if (wait > 0) await Task.Delay(TimeSpan.FromMilliseconds(wait));
+                else nextFrameMs = now;
             }
+            _measuredFps = "0.0";
             Capturer.SetState("stopped");
         }
 

@@ -39,12 +39,34 @@ function onOpen() {
     setInterval(() => {
         send({ event: events.ScanSSDP });
     }, 10000);
+    send({ event: events.ReadConfig, key: 'targetFps' });
     readCaptureStatus();
     setInterval(readCaptureStatus, 3000);
 }
 
-// Written by the native service (Capturer.cs) as preferences; read back with ReadConfig.
-const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
+// Must match HyperionClient.FpsPresets; the service ignores anything else.
+const fpsPresets = [10, 15, 20, 25, 30, 40];
+let targetFps = 25;
+
+function showTargetFps(fps) {
+    targetFps = fpsPresets.indexOf(fps) !== -1 ? fps : 25;
+    document.getElementById('targetFps').textContent = `Target FPS: < ${targetFps} >`;
+}
+
+// OK cycles through the presets (wrapping), Left/Right step down/up.
+window.stepTargetFps = (step, wrap) => {
+    if (!client || client.readyState !== WebSocket.OPEN) return;
+    const n = fpsPresets.length;
+    const i = fpsPresets.indexOf(targetFps) + step;
+    const next = fpsPresets[wrap ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
+    if (next === targetFps) return;
+    showTargetFps(next);
+    send({ event: events.SetConfig, key: 'targetFps', value: String(next) });
+}
+
+// Written by the native service (Capturer.cs) as preferences, except captureFps which it
+// serves live; all read back with ReadConfig.
+const captureStatusKeys = ['captureState', 'captureFps', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
 
 function readCaptureStatus() {
     for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
@@ -67,6 +89,8 @@ function onMessage(data) {
                 showRPC(msg.value);
             } else if(msg.key === 'enabled' && !msg.error) {
                 document.getElementById('enabled').checked = msg.value === 'true';
+            } else if (msg.key === 'targetFps') {
+                showTargetFps(msg.error ? 25 : Number(msg.value));
             } else if (captureStatusKeys.indexOf(msg.key) !== -1) {
                 showCaptureStatus(msg);
             }

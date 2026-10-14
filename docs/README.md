@@ -47,11 +47,18 @@ HyperTizenUI shows what the service found:
 | Field | Meaning |
 |---|---|
 | State | `idle` (capture disabled), `starting`, `running` (frames are being captured), `stopped`, `no-server` (no HyperHDR address saved), `unsupported` (no complete API), `error` (see Last error) |
+| Measured FPS | Frames actually captured per second over the last second (`0.0` when not capturing) |
 | API | `ppi_ve`, `ve`, `cs_ve` or `unsupported`, plus the platform version |
 | Condition | What the panel reported: result code, capture points, resolution, pixel density, sleep |
 | Last error | Timestamped error with exception, API, library path, platform version and which symbol families were complete, partial or missing |
 
 `not reported` means the installed native service is older than 1.0.1.
+
+### Target FPS
+
+The **Target FPS** button under Enabled sets how fast the service captures: 10, 15, 20, 25 (default), 30 or 40. Press [OK] to cycle through the values, or [LEFT] / [RIGHT] to step down / up. The change applies to the next frame and is remembered (needs native 1.0.2+).
+
+Capture time counts toward each frame, so the service only waits for whatever is left of the frame interval. If Measured FPS stays below the target, the TV's capture API is the limit: each frame reads the screen in batches and the firmware asks for a pause (`sleepMs` in Condition) after every batch.
 
 ## Building the package
 

@@ -70,9 +70,18 @@ namespace HyperTizen.WebSocket
             {
                 case Event.ScanSSDP:
                     {
-                        var devices = await ScanSSDPAsync();
-                        string resultEvent = JsonConvert.SerializeObject(new SSDPScanResultEvent(devices));
-                        await SendAsync(webSocket, resultEvent);
+                        // A search waits seconds for replies. Run it aside so status reads and
+                        // Enabled / target FPS changes on this connection aren't queued behind it.
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var devices = await ScanSSDPAsync();
+                                string resultEvent = JsonConvert.SerializeObject(new SSDPScanResultEvent(devices));
+                                await SendAsync(webSocket, resultEvent);
+                            }
+                            catch (Exception) { } // UI went away mid-scan
+                        });
                         break;
                     }
 
@@ -114,7 +123,12 @@ namespace HyperTizen.WebSocket
         private async Task<string> ReadConfigAsync(ReadConfigEvent readConfigEvent)
         {
             string result;
-            if (!Preference.Contains(readConfigEvent.key))
+            if (readConfigEvent.key == "captureFps")
+            {
+                // Live value, kept out of Preference so a running loop doesn't write storage every second.
+                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, HyperionClient.MeasuredFps));
+            }
+            else if (!Preference.Contains(readConfigEvent.key))
             {
                 result = JsonConvert.SerializeObject(new ReadConfigResultEvent(true, readConfigEvent.key, "Key doesn't exist."));
             }
@@ -126,10 +140,16 @@ namespace HyperTizen.WebSocket
             return result;
         }
 
+        // A WebSocket allows one send at a time; SSDP results can now race ReadConfig replies.
+        // ponytail: one lock for all UI connections, there is normally just one
+        private readonly SemaphoreSlim _sendLock = new SemaphoreSlim(1, 1);
+
         private async Task SendAsync(System.Net.WebSockets.WebSocket webSocket, string message)
         {
             var buffer = Encoding.UTF8.GetBytes(message);
-            await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None);
+            await _sendLock.WaitAsync();
+            try { await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, CancellationToken.None); }
+            finally { _sendLock.Release(); }
         }
 
         void SetConfiguration(SetConfigEvent setConfigEvent)
@@ -151,6 +171,13 @@ namespace HyperTizen.WebSocket
                         // already alive; the old false->true edge check left a loop that had exited
                         // for any other reason impossible to restart from the UI.
                         if (value) Task.Run(() => App.client.Start());
+                        break;
+                    }
+                case "targetFps":
+                    {
+                        // Picked up by the running loop on its next frame. Anything but a preset is
+                        // ignored and not saved.
+                        if (!HyperionClient.TrySetTargetFps(setConfigEvent.value)) return;
                         break;
                     }
             }

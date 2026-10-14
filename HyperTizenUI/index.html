@@ -15,10 +15,12 @@
         <h1>HyperTizen</h1>
         <h3 id="status">Status</h3>
         <a><input type="checkbox" id="enabled"> Enabled</a>
+        <button id="targetFps" onclick="stepTargetFps(1, true)">Target FPS: &lt; 25 &gt;</button>
         <h3 id="currentServer">No HyperHDR server selected</h3>
         <div id="captureStatus">
             <h3>Native Capture Status</h3>
             <p>State: <span id="captureState">-</span></p>
+            <p>Measured FPS: <span id="captureFps">-</span></p>
             <p>API: <span id="detectedApi">-</span> (platform <span id="detectedPlatformVersion">-</span>)</p>
             <p>Condition: <span id="captureCondition">-</span></p>
             <p>Last error: <span id="lastCaptureError">-</span></p>
@@ -67,6 +69,9 @@
                     const uri = element.getAttribute('data-uri');
                     setRPC(uri);
                 }
+            } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && document.activeElement.id === 'targetFps') {
+                e.preventDefault();
+                stepTargetFps(e.key === 'ArrowRight' ? 1 : -1);
             } else if (e.keyCode === 65376 || e.keyCode === 65385) {
                 // Samsung IME Done / Cancel: close the keyboard, Up/Down keep navigating from this field.
                 document.activeElement.blur();
