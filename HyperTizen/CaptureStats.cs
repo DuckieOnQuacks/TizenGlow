@@ -172,6 +172,11 @@ namespace HyperTizen
             public long? ddpFramesSent;
             public long? ddpPacketsSent;
             public long? ddpSendErrors;
+
+            /// <summary>LED count WLED itself reports (GET /json/info), null until it has answered.</summary>
+            public int? wledLedCount;
+            /// <summary>e.g. WLED 0.15.0 "Living room", or why the info could not be read.</summary>
+            public string wledInfo;
         }
     }
 }

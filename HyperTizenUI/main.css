@@ -42,6 +42,15 @@ h1 {
     font-size: 48px;
 }
 
+.pills {
+    display: flex;
+    gap: 14px;
+}
+
+.pills .pill:empty {
+    display: none;
+}
+
 .pill {
     padding: 8px 22px;
     border-radius: 999px;
@@ -122,6 +131,20 @@ body:not(.output-wled) .wledOnly, body.output-wled .hyperhdrOnly {
     display: flex;
     flex-direction: column;
     gap: 24px;
+}
+
+.pill.warn {
+    background-color: #4a3206;
+    border: 1px solid var(--warn);
+    color: #ffd27a;
+}
+
+.hint.ok {
+    color: var(--ok);
+}
+
+.hint.warn {
+    color: var(--warn);
 }
 
 /* ---- controls ---- */

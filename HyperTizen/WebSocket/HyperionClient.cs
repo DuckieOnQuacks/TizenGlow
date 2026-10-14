@@ -3,6 +3,7 @@ using Tizen.Applications;
 using HyperTizen.Wled;
 using System;
 using System.Globalization;
+using System.Reflection;
 using System.Threading;
 
 namespace HyperTizen.WebSocket
@@ -19,6 +20,20 @@ namespace HyperTizen.WebSocket
         public static readonly int[] FpsPresets = { 10, 15, 20, 25, 30, 40 };
         private static volatile CaptureMode _mode = CaptureMode.Balanced;
         private static volatile int _targetFps = CaptureMode.Balanced.TargetFps;
+
+        /// <summary>
+        /// This service's version (tizen-manifest.xml, stamped in at build time), without build metadata.
+        /// HyperTizenUI compares it with its own so a half-done update is obvious.
+        /// </summary>
+        public static readonly string ServiceVersion = ReadServiceVersion();
+
+        private static string ReadServiceVersion()
+        {
+            var attr = typeof(HyperionClient).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+            string version = attr != null ? attr.InformationalVersion : "unknown";
+            int plus = version.IndexOf('+'); // the SDK appends "+<commit>"
+            return plus >= 0 ? version.Substring(0, plus) : version;
+        }
 
         /// <summary>Live performance numbers; reset when capture starts and when the mode, target FPS or output changes.</summary>
         public static readonly CaptureStats Stats = new CaptureStats();

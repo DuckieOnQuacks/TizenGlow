@@ -123,7 +123,11 @@ namespace HyperTizen.WebSocket
         private async Task<string> ReadConfigAsync(ReadConfigEvent readConfigEvent)
         {
             string result;
-            if (readConfigEvent.key == "captureStats")
+            if (readConfigEvent.key == "nativeVersion")
+            {
+                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, HyperionClient.ServiceVersion));
+            }
+            else if (readConfigEvent.key == "captureStats")
             {
                 // Live values (an object, see CaptureStats.Snapshot), kept out of Preference so a
                 // running loop doesn't write storage every frame.

@@ -2,10 +2,12 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 
 namespace HyperTizen.Wled
 {
@@ -21,6 +23,8 @@ namespace HyperTizen.Wled
         internal static int TestHoldMs = 10000; // test colours are resent until then: WLED drops realtime data after 2.5 s (default)
         public const int TestIntervalMs = 100;
         public const int ErrorBackoffMs = 1000; // after a failed send, skip sends this long instead of retrying every frame
+        internal static int InfoPort = 80;      // WLED's web server, for the one-off LED count check
+        internal static int InfoRetryMs = 30000;
 
         private static readonly Regex HostPattern = new Regex(@"^[A-Za-z0-9.-]+$");
 
@@ -53,6 +57,9 @@ namespace HyperTizen.Wled
         private bool _lastSendFailed;
         private CancellationTokenSource _test;
         private bool _testActive;
+        private int? _wledLedCount;
+        private string _wledInfo;
+        private int _infoGeneration;
 
         /// <param name="smoothingMs">Smoothing time constant while smoothing is on (follows the Capture Quality mode).</param>
         public WledOutput(Func<int> smoothingMs, Func<double> clock = null)
@@ -99,6 +106,7 @@ namespace HyperTizen.Wled
             string host = value.Substring(0, colon);
             int port;
             if (!HostPattern.IsMatch(host) || !int.TryParse(value.Substring(colon + 1), NumberStyles.None, CultureInfo.InvariantCulture, out port) || port < 1 || port > 65535) return false;
+            int generation;
             lock (_lock)
             {
                 _host = host;
@@ -106,8 +114,52 @@ namespace HyperTizen.Wled
                 _endpoint = null;
                 _backoffUntil = 0;
                 _lastError = null;
+                _wledLedCount = null;
+                _wledInfo = "asking WLED for its LED count...";
+                generation = ++_infoGeneration;
             }
+            QueryInfo(host, generation);
             return true;
+        }
+
+        /// <summary>
+        /// Reads WLED's own LED count (GET /json/info, read-only; frames never use HTTP) so the UI can warn
+        /// when the layout total doesn't match it. Retries every InfoRetryMs while WLED can't be reached,
+        /// and stops as soon as the target changes.
+        /// </summary>
+        private void QueryInfo(string host, int generation)
+        {
+            Task.Run(async () =>
+            {
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(3) })
+                {
+                    while (true)
+                    {
+                        lock (_lock) if (generation != _infoGeneration) return; // a newer target took over
+                        string info;
+                        int? count = null;
+                        try
+                        {
+                            JObject json = JObject.Parse(await http.GetStringAsync("http://" + host + ":" + InfoPort + "/json/info"));
+                            count = (int?)json["leds"]?["count"];
+                            info = count == null ? "WLED answered without an LED count"
+                                : "WLED " + json["ver"] + (json["name"] != null ? " \"" + json["name"] + "\"" : "");
+                        }
+                        catch (Exception e)
+                        {
+                            info = "couldn't read WLED's LED count (" + e.GetType().Name + ": " + e.Message + "); retrying every " + InfoRetryMs / 1000 + " s";
+                        }
+                        lock (_lock)
+                        {
+                            if (generation != _infoGeneration) return; // target changed meanwhile
+                            _wledInfo = info;
+                            _wledLedCount = count;
+                        }
+                        if (count != null) return;
+                        await Task.Delay(InfoRetryMs);
+                    }
+                }
+            });
         }
 
         public bool TrySetLayout(string value)
@@ -344,6 +396,8 @@ namespace HyperTizen.Wled
                 s.ddpPacketsSent = _packetsSent;
                 s.ddpSendErrors = _sendErrors;
                 s.outputError = _lastError;
+                s.wledLedCount = _wledLedCount;
+                s.wledInfo = _wledInfo;
             }
         }
     }

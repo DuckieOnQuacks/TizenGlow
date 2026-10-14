@@ -13,7 +13,10 @@
 <body>
     <header class="topbar">
         <h1>HyperTizen</h1>
-        <span id="status" class="pill">Connecting...</span>
+        <div class="pills">
+            <span id="versions" class="pill"></span>
+            <span id="status" class="pill">Connecting...</span>
+        </div>
     </header>
 
     <main class="columns">
@@ -62,6 +65,7 @@
                         <input type="number" id="wledPort" value="4048" min="1" max="65535">
                         <button id="wledSave" onclick="saveWledTarget()">Save WLED Target</button>
                         <p id="wledStatus"></p>
+                        <p id="wledInfo" class="hint"></p>
                     </div>
                 </section>
 
@@ -89,6 +93,7 @@
                             <label for="ledLeft">Left</label><input type="number" id="ledLeft" min="0" max="2000">
                         </div>
                         <p class="total">Total: <span id="ledTotal">0</span> LEDs</p>
+                        <p id="ledCountCheck" class="hint"></p>
                         <button id="ledStart" data-step="stepLedStart" onclick="stepLedStart(1, true)">Start corner: &lt; Top Left &gt;</button>
                         <button id="ledDirection" data-step="stepLedDirection" onclick="stepLedDirection(1, true)">Direction: &lt; Clockwise &gt;</button>
                         <button id="layoutSave" onclick="saveLedLayout()">Save LED Layout</button>
@@ -139,6 +144,7 @@
                 <span>DDP errors</span><span id="statDdpErrors">-</span>
                 <span>DDP frames</span><span id="statDdpFrames">-</span>
                 <span>DDP packets</span><span id="statDdpPackets">-</span>
+                <span>WLED LEDs</span><span id="statWledLeds">-</span>
             </div>
             <div class="details">
                 <p><span class="label">Frame</span> <span id="statBreakdown">-</span></p>

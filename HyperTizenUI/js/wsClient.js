@@ -1,3 +1,6 @@
+// This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
+const uiVersion = '1.0.6';
+
 let client;
 let deviceIP;
 const ssdpDevices = [];
@@ -38,6 +41,7 @@ function onOpen() {
     send({ event: events.ScanSSDP });
     send({ event: events.ReadConfig, key: 'captureMode' });
     send({ event: events.ReadConfig, key: 'targetFps' });
+    send({ event: events.ReadConfig, key: 'nativeVersion' });
     for (const key of wledKeys) send({ event: events.ReadConfig, key });
     readCaptureStatus();
     // One timer each, however often this runs.
@@ -198,6 +202,47 @@ function showLedTotal() {
     let total = 0;
     for (const id of ledSides) total += Math.max(0, parseInt(document.getElementById(id).value, 10) || 0);
     setText('ledTotal', String(total));
+    showLedCheck(total);
+}
+
+// LED count WLED itself reports (the service asks it once per target); null until known.
+let wledLedCount = null;
+
+const leds = n => n === 1 ? '1 LED' : `${n} LEDs`;
+
+// Compares the layout being typed with WLED's own LED count.
+function showLedCheck(total) {
+    const element = document.getElementById('ledCountCheck');
+    let text = '', cls = 'hint';
+    if (wledLedCount !== null) {
+        if (total === 0) text = `WLED reports ${wledLedCount} LEDs.`;
+        else if (total === wledLedCount) { text = `Matches WLED's ${wledLedCount} LEDs.`; cls = 'hint ok'; }
+        else if (total < wledLedCount) { text = `WLED has ${wledLedCount} LEDs: the last ${leds(wledLedCount - total)} would stay dark. The four sides should add up to ${wledLedCount}.`; cls = 'hint warn'; }
+        else { text = `WLED has only ${wledLedCount} LEDs: the last ${leds(total - wledLedCount)} in this layout would never light. The four sides should add up to ${wledLedCount}.`; cls = 'hint warn'; }
+    }
+    if (element.className !== cls) element.className = cls;
+    setText('ledCountCheck', text);
+}
+
+function versionParts(v) { return String(v).split('.').map(n => parseInt(n, 10) || 0); }
+
+function compareVersions(a, b) {
+    const x = versionParts(a), y = versionParts(b);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0) ? -1 : 1;
+    }
+    return 0;
+}
+
+// The service (TPK) and this page (TizenBrew module) are released together; say which one is behind.
+function showVersions(native) {
+    const element = document.getElementById('versions');
+    const older = native === null || compareVersions(native, uiVersion) < 0;
+    element.className = native === uiVersion ? 'pill' : 'pill warn';
+    element.textContent = native === uiVersion ? `v${uiVersion}`
+        : native === null ? `Service older than ${uiVersion}: install the latest TPK`
+        : older ? `Service ${native}, page ${uiVersion}: install the latest TPK`
+        : `Service ${native}, page ${uiVersion}: update the TizenBrew module`;
 }
 
 window.saveLedLayout = () => {
@@ -280,6 +325,12 @@ function showCaptureStats(msg) {
     setText('statDdpFrames', has(s && s.ddpFramesSent) ? String(s.ddpFramesSent) : '-');
     setText('statDdpPackets', has(s && s.ddpPacketsSent) ? String(s.ddpPacketsSent) : '-');
     setText('statOutputError', !s ? '-' : s.outputError || 'none');
+
+    // WLED's own LED count (native 1.0.6+).
+    wledLedCount = has(s && s.wledLedCount) ? s.wledLedCount : null;
+    setText('statWledLeds', wledLedCount !== null ? String(wledLedCount) : '-');
+    setText('wledInfo', !has(s && s.wledInfo) ? '' : wledLedCount !== null ? `${s.wledInfo}: ${wledLedCount} LEDs` : s.wledInfo);
+    showLedTotal();
 }
 
 function onMessage(data) {
@@ -295,6 +346,8 @@ function onMessage(data) {
                 showTargetFps(msg.error ? 25 : Number(msg.value));
             } else if (msg.key === 'captureMode') {
                 showCaptureMode(msg.error ? 'balanced' : msg.value);
+            } else if (msg.key === 'nativeVersion') {
+                showVersions(msg.error ? null : String(msg.value));
             } else if (msg.key === 'outputMode') {
                 showOutputMode(msg.error ? 'hyperhdr' : msg.value);
             } else if (msg.key === 'wledTarget') {

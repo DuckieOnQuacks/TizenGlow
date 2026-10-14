@@ -1,0 +1,77 @@
+name: Release
+
+# Builds the TV service (TPK) and publishes it next to the matching settings page.
+#
+# To release: set the same version in HyperTizen/tizen-manifest.xml, package.json and
+# HyperTizenUI/js/wsClient.js (uiVersion), commit, then push a tag "v<version>", e.g. v1.0.6.
+# A GitHub Release is created with the TPK and its SHA-256 attached.
+#
+# Run it by hand (Actions > Release > Run workflow) to only build; the TPK is then a
+# downloadable artifact of the run.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Check the versions agree
+        run: |
+          manifest=$(grep -o 'package="io.gh.reisxd.HyperTizen" version="[^"]*"' HyperTizen/tizen-manifest.xml | sed 's/.*version="//; s/"$//')
+          package=$(jq -r .version package.json)
+          page=$(grep -o "const uiVersion = '[^']*'" HyperTizenUI/js/wsClient.js | cut -d"'" -f2)
+          echo "tizen-manifest.xml=$manifest package.json=$package wsClient.js=$page"
+          if [ -z "$manifest" ] || [ "$manifest" != "$package" ] || [ "$manifest" != "$page" ]; then
+            echo "::error::versions differ: tizen-manifest.xml '$manifest', package.json '$package', wsClient.js uiVersion '$page'"
+            exit 1
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$manifest" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $manifest"
+            exit 1
+          fi
+          echo "VERSION=$manifest" >> "$GITHUB_ENV"
+
+      - name: Build TPK
+        run: dotnet build HyperTizen/HyperTizen.csproj -c Release
+
+      - name: Checksum
+        run: |
+          tpk="io.gh.reisxd.HyperTizen-$VERSION.tpk"
+          cp "HyperTizen/bin/Release/tizen90/$tpk" .
+          sha256sum "$tpk" | tee "$tpk.sha256"
+          echo "SHA256=$(cut -d' ' -f1 "$tpk.sha256")" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: io.gh.reisxd.HyperTizen-${{ env.VERSION }}
+          path: io.gh.reisxd.HyperTizen-${{ env.VERSION }}.tpk*
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          module=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          tpk="io.gh.reisxd.HyperTizen-$VERSION.tpk"
+          cat > notes.md <<EOF
+          **TV service:** \`$tpk\`, SHA-256 \`$SHA256\`.
+          It is signed only with the Tizen SDK test certificates, so re-sign it for your TV (TizenBrew Installer or Tizen Studio) before installing.
+
+          **Settings page:** in TizenBrew add the GitHub module \`$module\` to always get the latest release, or \`$module@$GITHUB_REF_NAME\` to stay on this one.
+
+          Install both. The page's top bar shows \`v$VERSION\` when the service and the page match, and says which one to update when they don't.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "$tpk" "$tpk.sha256" --title "HyperTizen $VERSION" --notes-file notes.md

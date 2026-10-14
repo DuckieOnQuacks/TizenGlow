@@ -4,26 +4,20 @@ HyperTizen is a Hyperion / HyperHDR capturer for Tizen TVs.
 
 # Installation
 
-To install HyperTizen, you need to have a Samsung TV (Tizen) that has at least Tizen 6.5 (2022+).
+HyperTizen has two parts, and both are needed:
 
-You'll need Tizen Studio to install the app on your TV. You can download it from the [official website](https://developer.samsung.com/smarttv/develop/getting-started/setting-up-sdk/installing-tv-sdk.html).
+- **The TV service** (`io.gh.reisxd.HyperTizen-<version>.tpk`): a background app with no screen of its own that captures the picture and sends it to HyperHDR or WLED.
+- **The settings page** (HyperTizenUI): opened through [TizenBrew](https://github.com/reisxd/TizenBrew), which also starts the service.
 
-1. Download the latest release from the [releases page](https://github.com/reisxd/HyperTizen/releases/latest).
+You need a Samsung TV with Tizen 6.5 or newer (2022+).
 
-2. Change the Host PC IP address to your PC's IP address by following [this](https://developer.samsung.com/smarttv/develop/getting-started/using-sdk/tv-device.html#Connecting-the-TV-and-SDK)
+1. Download the TPK from the [latest release](https://github.com/DuckieOnQuacks/HyperTizen/releases/latest). The release notes list its SHA-256.
+2. The TPK is signed only with the Tizen SDK's test certificates, so sign it with your own Samsung certificate and install it. TizenBrew Installer does both; with Tizen Studio see [Resigning the package](#resigning-the-package) and then run `tizen install -n io.gh.reisxd.HyperTizen-<version>.tpk`.
+3. Install TizenBrew on the TV if you haven't ([guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
+4. In TizenBrew's module manager ([GREEN] button) add the GitHub module `duckieonquacks/hypertizen`. Without a version it always loads the newest release; add `@v<version>` (for example `duckieonquacks/hypertizen@v1.0.6`) to stay on one release.
+5. Open the module. The top bar shows `v<version>` when the service and the page match. If it says which one to update instead, the other half is out of date: install the TPK from the same release, or re-add the module.
 
-3. Install the package:
-```bash
-tizen install -n path/to/io.gh.reisxd.HyperTizen.tpk
-```
-
-Note that `tizen` is in `C:\tizen-studio\tools\ide\bin` on Windows and in `~/tizen-studio/tools/ide/bin` on Linux.
-
-If you get `install failed[118, -12], reason: Check certificate error` error, you'll have to resign the package.
-
-4. Install TizenBrew to your TV. Follow [this](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md) guide.
-
-5. Add `reisxd/HyperTizen/HyperTizenUI` as a GitHub module to the module manager. You can access the module manager by pressing the [GREEN] button on the remote.
+Updating: install the new release's TPK. The page updates by itself (it can take a few hours to reach the TV because of CDN caching; pin `@v<version>` to get it immediately). Your settings are kept as long as the new TPK installs over the old one; if the TV makes you uninstall first (different signing certificate), enter them again.
 
 ## Manual HyperHDR server (when SSDP discovery fails)
 
@@ -108,7 +102,7 @@ TV capture -> 14 edge samples -> LED layout + interpolation -> DDP over UDP -> W
 1. Set **Output** to **WLED Direct**.
 2. Enter the WLED IP (for example `192.168.1.227`) and DDP port **4048**, then **Save WLED Target**.
 3. Press **Test WLED > Red**. Every LED on the strip should turn red for 10 seconds. This works with capture off and uses the same DDP sender as live capture, so if it works, the network path is good.
-4. Under **LED Layout**, enter the number of LEDs on each side of the TV, pick the **Start corner** (where the strip's first LED is) and **Direction** (which way it runs), as seen from the front of the TV, then **Save LED Layout**. Top + Right + Bottom + Left should equal the LED count in WLED's LED Preferences.
+4. Under **LED Layout**, enter the number of LEDs on each side of the TV, pick the **Start corner** (where the strip's first LED is) and **Direction** (which way it runs), as seen from the front of the TV, then **Save LED Layout**. Top + Right + Bottom + Left should equal WLED's own LED count: HyperTizen reads that count from WLED when you save the target (shown under the target and as **WLED LEDs** in status) and warns under **Total** while you type a layout that doesn't match.
 5. Turn on **Capture enabled**.
 
 WLED needs **Receive UDP realtime** on (Config > Sync Interfaces, on by default). If HyperTizen stops sending, WLED returns to its own effect after its realtime timeout (2.5 s by default).
@@ -134,6 +128,13 @@ Packets follow WLED's receiver (`wled00/e131.cpp`): 10-byte header, version 1, d
 ### Status
 
 Native Capture Status shows the output, its target and state (`ready`, `sending`, `testing`, `send error`, `no LED layout`, `not configured`; UDP has no connection, so there is no "connected"), LED count, packets per frame, last send time, DDP frames, packets and errors, and the last output error. A failed send never stops capture: it is counted and retried after 1 second. **Peak sample** is the largest raw value the capture API returned; above 255 means the TV returns more than 8 bits per channel, which both outputs currently clip at 255.
+
+## Releasing a new version
+
+1. Set the same version in `HyperTizen/tizen-manifest.xml`, `package.json` and `uiVersion` in `HyperTizenUI/js/wsClient.js`.
+2. Commit, then push a tag `v<version>` (for example `git tag v1.0.7 && git push origin v1.0.7`).
+
+The [Release workflow](../.github/workflows/release.yml) checks that the three versions and the tag agree, builds the TPK on GitHub and publishes a release with the TPK and its SHA-256. The service's version is taken from `tizen-manifest.xml` at build time and reported to the page, which is how the top bar knows when the two halves differ. Running the workflow by hand (Actions > Release > Run workflow) only builds the TPK, as a downloadable artifact.
 
 ## Building the package
 
