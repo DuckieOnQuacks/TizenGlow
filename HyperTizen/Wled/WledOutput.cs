@@ -38,8 +38,8 @@ namespace HyperTizen.Wled
         private int _blackThreshold;
         private bool _smoothing = true;
 
-        private readonly float[] _samples = new float[16 * 3];
-        private readonly float[] _smoothed = new float[16 * 3];
+        private readonly float[] _samples = new float[LedLayout.SampleCount * 3];
+        private readonly float[] _smoothed = new float[LedLayout.SampleCount * 3];
         private bool _hasSmoothed;
         private double _lastPrepareMs;
         private float[] _leds = new float[0];
@@ -160,7 +160,7 @@ namespace HyperTizen.Wled
                 LedLayout layout = _layout;
                 if (layout == null) return;
 
-                for (int i = 0, o = 0; i < 16; i++, o += 3)
+                for (int i = 0, o = 0; i < LedLayout.SampleCount; i++, o += 3)
                 {
                     // Same 8-bit clamp ToImage applies for HyperHDR.
                     _samples[o] = Math.Min(255, Math.Max(0, samples[i].R));
@@ -168,7 +168,7 @@ namespace HyperTizen.Wled
                     _samples[o + 2] = Math.Min(255, Math.Max(0, samples[i].B));
                 }
 
-                // Time-based exponential smoothing on the 16 samples (mapping is linear, so this equals
+                // Time-based exponential smoothing on the samples (mapping is linear, so this equals
                 // smoothing every LED, at a fraction of the work). alpha comes from the real time since
                 // the last frame, so the response time stays the same whatever the frame rate.
                 double now = _clock();

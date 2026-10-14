@@ -20,7 +20,7 @@ namespace HyperTizen
         /// <summary>Short honest state, e.g. "connected" (WebSocket) or "sending" (DDP has no connection).</summary>
         string State { get; }
 
-        /// <summary>Builds this output's frame from the 16 capture samples (timed as "prepare").</summary>
+        /// <summary>Builds this output's frame from the capture samples (timed as "prepare").</summary>
         void Prepare(Color[] samples);
 
         /// <summary>Sends the prepared frame. True when it went out; network trouble returns false, never throws.</summary>

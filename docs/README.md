@@ -34,9 +34,13 @@ If the "SSDP Devices" list stays empty (multicast blocked, VLANs, firewall, etc.
 3. Enter the server's IP address or hostname (e.g. `192.168.1.50`). Press [OK] on the field to open the TV keyboard.
 4. Enter the WebSocket port. This is the HyperHDR / Hyperion **web interface port** (default `8090`), not the FlatBuffers (`19400`) or JSON (`19444`) port.
 5. Select **Use Manual Server**. The UI shows `Currently Connected to ws://HOST:PORT`.
-6. Tick **Enabled**.
+6. Turn on **Capture enabled**.
 
 This saves the same `rpcServer` setting that selecting an SSDP device does, so it persists across restarts and the SSDP list can still be used at any time.
+
+## Using HyperTizenUI with the remote
+
+Settings are on the left, status on the right. UP / DOWN move between controls (the settings column scrolls to keep the selected one in view), OK presses buttons and opens the keyboard on text fields, and on settings shown as `< value >` or `A | B | C`, LEFT / RIGHT step through the choices while OK cycles them. Only the settings for the selected output are shown.
 
 ## Native Capture Status
 
@@ -81,7 +85,7 @@ The **Capture Quality** selector under Enabled picks a preset (OK cycles, LEFT /
 | Pause after a failed frame | 1 s | 5 s | 5 s |
 | Condition read retry | 5 s | 10 s | 10 s |
 
-The modes do not change how many screen points are sampled: the 16 points are mapped one-to-one onto the image HyperHDR receives, and the firmware decides how many are read per batch. They also do not smooth colours; HyperHDR's own smoothing stays in charge of LED transitions.
+The modes do not change how many screen points are sampled: 14 points around the edge (4 top, 3 right, 4 bottom, 3 left) are mapped one-to-one onto the image HyperHDR receives, and the firmware decides how many are read per round. They also do not smooth colours; HyperHDR's own smoothing stays in charge of LED transitions.
 
 ### Target FPS
 
@@ -94,7 +98,7 @@ Capture, image and send time count toward each frame, so the service only waits 
 HyperTizen can drive a [WLED](https://kno.wled.ge/) controller itself, with no HyperHDR and no PC:
 
 ```
-TV capture -> 16 edge samples -> LED layout + interpolation -> DDP over UDP -> WLED -> strip
+TV capture -> 14 edge samples -> LED layout + interpolation -> DDP over UDP -> WLED -> strip
 ```
 
 **Output** at the top of HyperTizenUI picks where frames go: **HyperHDR** (the default, unchanged) or **WLED Direct**. Only one is active; switching is safe while capturing and only that output's settings are shown.
@@ -105,7 +109,7 @@ TV capture -> 16 edge samples -> LED layout + interpolation -> DDP over UDP -> W
 2. Enter the WLED IP (for example `192.168.1.227`) and DDP port **4048**, then **Save WLED Target**.
 3. Press **Test WLED > Red**. Every LED on the strip should turn red for 10 seconds. This works with capture off and uses the same DDP sender as live capture, so if it works, the network path is good.
 4. Under **LED Layout**, enter the number of LEDs on each side of the TV, pick the **Start corner** (where the strip's first LED is) and **Direction** (which way it runs), as seen from the front of the TV, then **Save LED Layout**. Top + Right + Bottom + Left should equal the LED count in WLED's LED Preferences.
-5. Tick **Enabled**.
+5. Turn on **Capture enabled**.
 
 WLED needs **Receive UDP realtime** on (Config > Sync Interfaces, on by default). If HyperTizen stops sending, WLED returns to its own effect after its realtime timeout (2.5 s by default).
 

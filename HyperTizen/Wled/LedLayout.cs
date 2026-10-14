@@ -22,8 +22,10 @@ namespace HyperTizen.Wled
     {
         public const int MaxPerSide = 2000;
 
-        // Capture points on each edge (indices into Capturer's table), in canonical order. Points 14
-        // and 15 sit mid-screen and are not used.
+        /// <summary>Capture points per frame (Capturer's table): 4 top, 3 right, 4 bottom, 3 left.</summary>
+        public const int SampleCount = 14;
+
+        // Capture points on each edge (indices into Capturer's table), in canonical order.
         public static readonly int[][] EdgeSamples =
         {
             new[] { 0, 1, 2, 3 },   // top
@@ -118,7 +120,7 @@ namespace HyperTizen.Wled
         public int CanonicalIndex(int p) { return _canonical[p]; }
 
         /// <summary>
-        /// samples: 16 capture points as RGB floats (48 values). leds: Count x RGB, filled in physical
+        /// samples: SampleCount capture points as RGB floats (42 values). leds: Count x RGB, filled in physical
         /// strip order. Linear RGB interpolation; a different colour space would only change this loop.
         /// </summary>
         public void Map(float[] samples, float[] leds)

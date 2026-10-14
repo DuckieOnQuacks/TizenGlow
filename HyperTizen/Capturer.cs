@@ -43,9 +43,9 @@ namespace HyperTizen
             new CapturePoint(0.15, 0.95),
             new CapturePoint(0.05, 0.725),
             new CapturePoint(0.05, 0.4),
-            new CapturePoint(0.05, 0.2),
-            new CapturePoint(0.35, 0.5),
-            new CapturePoint(0.65, 0.5)
+            new CapturePoint(0.05, 0.2)
+            // Two mid-screen points (0.35, 0.5) and (0.65, 0.5) used to follow. Neither output ever used
+            // them, and with the firmware's usual 2 points per round they cost a whole extra round.
         };
         
         /// <summary>The screen positions sampled each frame (WLED Direct maps LEDs from them).</summary>
@@ -184,27 +184,23 @@ namespace HyperTizen
         public static Color[] GetColors()
         {
             Color[] colorData = new Color[_capturedPoints.Length];
-            int[] updatedIndexes = new int[_condition.ScreenCapturePoints];
             CaptureFamily api = _api;
+            int batch = _condition.ScreenCapturePoints;
+            if (batch <= 0 || api == null) return colorData;
 
-            int i = 0;
-            while (i < _capturedPoints.Length)
+            // The firmware measures `batch` points per round: set their positions, wait SleepMS, read them
+            // back. When the points don't divide evenly, the last round is padded by repeating the final
+            // point, so every round is a full batch as before; padded readings are discarded.
+            for (int first = 0; first < colorData.Length; first += batch)
             {
-                if (_condition.ScreenCapturePoints == 0 || api == null) break;
-                for (int j = 0; j < _condition.ScreenCapturePoints; j++)
+                for (int j = 0; j < batch; j++)
                 {
-                    updatedIndexes[j] = i;
-                    int x = (int)(_capturedPoints[i].X * (double)_condition.Width) - _condition.PixelDensityX / 2;
-                    int y = (int)(_capturedPoints[i].Y * (double)_condition.Height) - _condition.PixelDensityY / 2;
+                    CapturePoint point = _capturedPoints[Math.Min(first + j, colorData.Length - 1)];
+                    int x = (int)(point.X * (double)_condition.Width) - _condition.PixelDensityX / 2;
+                    int y = (int)(point.Y * (double)_condition.Height) - _condition.PixelDensityY / 2;
                     x = (x >= _condition.Width - _condition.PixelDensityX) ? _condition.Width - (_condition.PixelDensityX + 1) : x;
                     y = (y >= _condition.Height - _condition.PixelDensityY) ? (_condition.Height - _condition.PixelDensityY + 1) : y;
-                    int res = api.MeasurePosition(j, x, y);
-
-                    i++;
-                    if (res < 0)
-                    {
-                        // This should not happen, handle it.
-                    }
+                    api.MeasurePosition(j, x, y); // a failed position shows up as a failed pixel read below
                 }
 
                 if (_condition.SleepMS > 0)
@@ -213,7 +209,7 @@ namespace HyperTizen
                 }
                 int k = 0;
                 int failedReads = 0;
-                while (k < _condition.ScreenCapturePoints)
+                while (k < batch)
                 {
                     Color color;
 
@@ -228,7 +224,7 @@ namespace HyperTizen
                         }
                     } else
                     {
-                        colorData[i - _condition.ScreenCapturePoints + k] = color;
+                        if (first + k < colorData.Length) colorData[first + k] = color;
                         k++;
                     }
                 }
@@ -250,9 +246,12 @@ namespace HyperTizen
                     }
                 }
 
+                // Bottom points 7-10 run right to left (x = 0.79 ... 0.15) and left points 11-13 bottom to
+                // top (y = 0.725 ... 0.2), so both strips are painted in reverse index order. They used to
+                // be painted forwards, which mirrored HyperHDR's bottom and left edges.
                 for (int x = 0; x < 64; x++)
                 {
-                    Color color = colors[x / 16 + 7];
+                    Color color = colors[10 - x / 16];
                     SKColor sKColor = ClampColor(color);
                     for (int y = 44; y < 48; y++)
                     {
@@ -262,7 +261,7 @@ namespace HyperTizen
 
                 for (int y = 0; y < 48; y++)
                 {
-                    Color color = colors[11 + y / 16];
+                    Color color = colors[13 - y / 16];
                     SKColor sKColor = ClampColor(color);
                     for (int x = 0; x < 3; x++)
                     {

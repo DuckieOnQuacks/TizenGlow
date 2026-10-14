@@ -2,7 +2,7 @@ namespace HyperTizen
 {
     /// <summary>
     /// User-facing capture presets. Each sets only parameters the capture loop really has; sampling
-    /// density is not one of them (16 fixed points, batched by the firmware's ScreenCapturePoints, mapped
+    /// density is not one of them (14 fixed points, batched by the firmware's ScreenCapturePoints, mapped
     /// one-to-one onto ToImage's border strips). Colour smoothing applies only to WLED Direct; HyperHDR smooths its own.
     /// </summary>
     public sealed class CaptureMode

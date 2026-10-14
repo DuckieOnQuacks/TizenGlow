@@ -245,6 +245,8 @@ function setText(id, text) {
 function showCaptureStatus(msg) {
     setText(msg.key, !msg.error ? String(msg.value)
         : msg.key === 'captureState' ? 'not reported (is native HyperTizen 1.0.1+ installed?)' : '-');
+    // The stylesheet colours the state badge from this (running green, error red, ...).
+    if (msg.key === 'captureState') document.getElementById('captureState').dataset.state = msg.error ? '' : String(msg.value);
 }
 
 // Live numbers from the service (CaptureStats.cs), over its rolling 2 s window.
