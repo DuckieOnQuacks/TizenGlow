@@ -1,5 +1,8 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.0.7';
+const uiVersion = '1.0.8';
+// Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
+// service; a page-only release leaves it, and that release's TPK is then optional.
+const minService = '1.0.7';
 
 let client;
 let deviceIP;
@@ -235,14 +238,17 @@ function compareVersions(a, b) {
 }
 
 // The service (TPK) and this page (TizenBrew module) are released together; say which one is behind.
+// A service from minService up to this page's version works, so it is only shown, not flagged.
 function showVersions(native) {
     const element = document.getElementById('versions');
-    const older = native === null || compareVersions(native, uiVersion) < 0;
-    element.className = native === uiVersion ? 'pill' : 'pill warn';
+    const tooOld = native === null || compareVersions(native, minService) < 0;
+    const newer = !tooOld && compareVersions(native, uiVersion) > 0;
+    element.className = tooOld || newer ? 'pill warn' : 'pill';
     element.textContent = native === uiVersion ? `v${uiVersion}`
-        : native === null ? `Service older than ${uiVersion}: install the latest TPK`
-        : older ? `Service ${native}, page ${uiVersion}: install the latest TPK`
-        : `Service ${native}, page ${uiVersion}: update the TizenBrew module`;
+        : native === null ? `Service older than ${minService}: install the latest TPK`
+        : tooOld ? `Service ${native}, page ${uiVersion}: install the latest TPK`
+        : newer ? `Service ${native}, page ${uiVersion}: update the TizenBrew module`
+        : `Page ${uiVersion}, service ${native}`;
 }
 
 window.saveLedLayout = () => {

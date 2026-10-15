@@ -15,7 +15,7 @@ You need a Samsung TV with Tizen 6.5 or newer (2022+).
 2. The TPK is signed only with the Tizen SDK's test certificates, so sign it with your own Samsung certificate and install it. TizenBrew Installer does both; with Tizen Studio see [Resigning the package](#resigning-the-package) and then run `tizen install -n io.gh.reisxd.HyperTizen-<version>.tpk`.
 3. Install TizenBrew on the TV if you haven't ([guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
 4. In TizenBrew's module manager ([GREEN] button) add the GitHub module `duckieonquacks/hypertizen`. Without a version it always loads the newest release; add `@v<version>` (for example `duckieonquacks/hypertizen@v1.0.6`) to stay on one release.
-5. Open the module. The top bar shows `v<version>` when the service and the page match. If it says which one to update instead, the other half is out of date: install the TPK from the same release, or re-add the module.
+5. Open the module. The top bar shows `v<version>` when the service and the page match. If it says which one to update instead, the other half is out of date: install the TPK from the same release, or re-add the module. A page-only release (its notes say so) also works with an older service; the top bar then shows both versions without a warning.
 
 Updating: install the new release's TPK. The page updates by itself (it can take a few hours to reach the TV because of CDN caching; pin `@v<version>` to get it immediately). Your settings are kept as long as the new TPK installs over the old one; if the TV makes you uninstall first (different signing certificate), enter them again.
 
@@ -151,7 +151,7 @@ Edge bands are 12.5% of the screen deep and corner blocks a third of it each way
 
 ## Releasing a new version
 
-1. Set the same version in `HyperTizen/tizen-manifest.xml`, `package.json` and `uiVersion` in `HyperTizenUI/js/wsClient.js`.
+1. Set the same version in `HyperTizen/tizen-manifest.xml`, `package.json` and `uiVersion` in `HyperTizenUI/js/wsClient.js`. Raise `minService` in the same file only when the page needs something new from the service; leave it for a page-only release, whose TPK is then optional.
 2. Commit, then push a tag `v<version>` (for example `git tag v1.0.7 && git push origin v1.0.7`).
 
 The [Release workflow](../.github/workflows/release.yml) checks that the three versions and the tag agree, builds the TPK on GitHub and publishes a release with the TPK and its SHA-256. The service's version is taken from `tizen-manifest.xml` at build time and reported to the page, which is how the top bar knows when the two halves differ. Running the workflow by hand (Actions > Release > Run workflow) only builds the TPK, as a downloadable artifact.

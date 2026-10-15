@@ -32,9 +32,14 @@ jobs:
           manifest=$(grep -o 'package="io.gh.reisxd.HyperTizen" version="[^"]*"' HyperTizen/tizen-manifest.xml | sed 's/.*version="//; s/"$//')
           package=$(jq -r .version package.json)
           page=$(grep -o "const uiVersion = '[^']*'" HyperTizenUI/js/wsClient.js | cut -d"'" -f2)
+          min=$(grep -o "const minService = '[^']*'" HyperTizenUI/js/wsClient.js | cut -d"'" -f2)
           echo "tizen-manifest.xml=$manifest package.json=$package wsClient.js=$page"
           if [ -z "$manifest" ] || [ "$manifest" != "$package" ] || [ "$manifest" != "$page" ]; then
             echo "::error::versions differ: tizen-manifest.xml '$manifest', package.json '$package', wsClient.js uiVersion '$page'"
+            exit 1
+          fi
+          if [ -z "$min" ] || [ "$(printf '%s\n' "$min" "$manifest" | sort -V | tail -n 1)" != "$manifest" ]; then
+            echo "::error::wsClient.js minService '$min' must be set and no newer than $manifest"
             exit 1
           fi
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$manifest" ]; then
@@ -42,6 +47,7 @@ jobs:
             exit 1
           fi
           echo "VERSION=$manifest" >> "$GITHUB_ENV"
+          echo "MIN_SERVICE=$min" >> "$GITHUB_ENV"
 
       - name: Build TPK
         run: dotnet build HyperTizen/HyperTizen.csproj -c Release
@@ -66,12 +72,17 @@ jobs:
         run: |
           module=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
           tpk="io.gh.reisxd.HyperTizen-$VERSION.tpk"
+          if [ "$MIN_SERVICE" = "$VERSION" ]; then
+            install="Install both. The page's top bar shows \`v$VERSION\` when the service and the page match, and says which one to update when they don't."
+          else
+            install="The page works with service $MIN_SERVICE or newer, so the TPK is only needed if yours is older. The top bar says when one of them needs updating."
+          fi
           cat > notes.md <<EOF
           **TV service:** \`$tpk\`, SHA-256 \`$SHA256\`.
           It is signed only with the Tizen SDK test certificates, so re-sign it for your TV (TizenBrew Installer or Tizen Studio) before installing.
 
           **Settings page:** in TizenBrew add the GitHub module \`$module\` to always get the latest release, or \`$module@$GITHUB_REF_NAME\` to stay on this one.
 
-          Install both. The page's top bar shows \`v$VERSION\` when the service and the page match, and says which one to update when they don't.
+          $install
           EOF
           gh release create "$GITHUB_REF_NAME" "$tpk" "$tpk.sha256" --title "HyperTizen $VERSION" --notes-file notes.md
