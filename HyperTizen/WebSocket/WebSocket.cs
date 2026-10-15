@@ -34,41 +34,20 @@ namespace HyperTizen.WebSocket
             while (true)
             {
                 var httpContext = await _httpListener.GetContextAsync();
-                try
+                if (httpContext.Request.IsWebSocketRequest)
                 {
-                    IPEndPoint remote = null, local = null;
-                    try { remote = httpContext.Request.RemoteEndPoint; local = httpContext.Request.LocalEndPoint; } catch { }
-
-                    // Who is this? Decided before the WebSocket exists, so a refused client can't send any command.
-                    ClientGate.Decision decision = ClientGate.Decide(remote, local);
-                    ClientGate.Record(remote, local, httpContext.Request.Headers["Host"], httpContext.Request.Headers["Origin"], decision);
-                    if (!decision.Allowed && ClientGate.Enforce)
-                    {
-                        httpContext.Response.StatusCode = 403;
-                        httpContext.Response.Close();
-                        continue;
-                    }
-
-                    if (httpContext.Request.IsWebSocketRequest)
-                    {
-                        var wsContext = await httpContext.AcceptWebSocketAsync(null);
-                        _ = HandleWebSocketAsync(wsContext.WebSocket, remote, local);
-                    }
-                    else
-                    {
-                        httpContext.Response.StatusCode = 400;
-                        httpContext.Response.Close();
-                    }
+                    var wsContext = await httpContext.AcceptWebSocketAsync(null);
+                    _ = HandleWebSocketAsync(wsContext.WebSocket);
                 }
-                catch (Exception)
+                else
                 {
-                    // A broken or hostile handshake must not take the settings server down for everyone.
-                    try { httpContext.Response.Abort(); } catch { }
+                    httpContext.Response.StatusCode = 400;
+                    httpContext.Response.Close();
                 }
             }
         }
 
-        private async Task HandleWebSocketAsync(System.Net.WebSockets.WebSocket webSocket, IPEndPoint remote, IPEndPoint local)
+        private async Task HandleWebSocketAsync(System.Net.WebSockets.WebSocket webSocket)
         {
             var buffer = new byte[1024 * 4];
             var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
@@ -76,14 +55,14 @@ namespace HyperTizen.WebSocket
             while (result.MessageType != WebSocketMessageType.Close)
             {
                 var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                await OnMessageAsync(webSocket, message, remote, local);
+                await OnMessageAsync(webSocket, message);
                 result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
             }
 
             await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
         }
 
-        protected async Task OnMessageAsync(System.Net.WebSockets.WebSocket webSocket, string message, IPEndPoint remote, IPEndPoint local)
+        protected async Task OnMessageAsync(System.Net.WebSockets.WebSocket webSocket, string message)
         {
             BasicEvent data = JsonConvert.DeserializeObject<BasicEvent>(message);
 
@@ -109,7 +88,7 @@ namespace HyperTizen.WebSocket
                 case Event.ReadConfig:
                     {
                         ReadConfigEvent readConfigEvent = JsonConvert.DeserializeObject<ReadConfigEvent>(message);
-                        string result = await ReadConfigAsync(readConfigEvent, remote, local);
+                        string result = await ReadConfigAsync(readConfigEvent);
                         await SendAsync(webSocket, result);
                         break;
                     }
@@ -141,15 +120,10 @@ namespace HyperTizen.WebSocket
             return devices;
         }
 
-        private async Task<string> ReadConfigAsync(ReadConfigEvent readConfigEvent, IPEndPoint remote, IPEndPoint local)
+        private async Task<string> ReadConfigAsync(ReadConfigEvent readConfigEvent)
         {
             string result;
-            if (readConfigEvent.key == "connectionAudit")
-            {
-                // How this connection, recent connections and refused sources look to the gate (see ClientGate).
-                result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, ClientGate.Audit(remote, local, LoopbackProbe.State)));
-            }
-            else if (readConfigEvent.key == "nativeVersion")
+            if (readConfigEvent.key == "nativeVersion")
             {
                 result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, HyperionClient.ServiceVersion));
             }
@@ -265,54 +239,8 @@ namespace HyperTizen.WebSocket
     {
         public static async Task StartServerAsync()
         {
-            _ = Task.Run(() => LoopbackProbe.RunAsync("127.0.0.1", 8087));
             var wsServer = new WSServer("http://+:8086/");
             await wsServer.StartAsync();
-        }
-    }
-
-    /// <summary>
-    /// Diagnostic build only: a ping-only listener bound to 127.0.0.1:8087, to learn whether a
-    /// loopback-bound HttpListener works on the TV and is reachable from TizenBrew's page. It answers
-    /// every WebSocket with the endpoints it saw and closes; it has no settings and takes no commands.
-    /// </summary>
-    public static class LoopbackProbe
-    {
-        public static volatile string State = "not started";
-
-        public static async Task RunAsync(string host, int port)
-        {
-            var listener = new HttpListener();
-            try
-            {
-                listener.Prefixes.Add("http://" + host + ":" + port + "/");
-                listener.Start();
-                State = "listening on " + host + ":" + port;
-            }
-            catch (Exception e)
-            {
-                State = "could not listen on " + host + ":" + port + " (" + e.GetType().Name + ": " + e.Message + ")";
-                return;
-            }
-            while (true)
-            {
-                HttpListenerContext ctx = await listener.GetContextAsync();
-                try
-                {
-                    if (!ctx.Request.IsWebSocketRequest)
-                    {
-                        ctx.Response.StatusCode = 400;
-                        ctx.Response.Close();
-                        continue;
-                    }
-                    var ws = (await ctx.AcceptWebSocketAsync(null)).WebSocket;
-                    string reply = JsonConvert.SerializeObject(new { probe = "ok", remote = ctx.Request.RemoteEndPoint?.ToString(), local = ctx.Request.LocalEndPoint?.ToString() });
-                    byte[] bytes = Encoding.UTF8.GetBytes(reply);
-                    await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, CancellationToken.None);
-                    await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
-                }
-                catch (Exception) { try { ctx.Response.Abort(); } catch { } }
-            }
         }
     }
 
