@@ -306,6 +306,21 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
     box-shadow: 0 0 24px rgba(255, 152, 0, 0.55);
 }
 
+.checkGrid {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 18px;
+    font-size: 22px;
+}
+
+.checkGrid > span:nth-child(odd) {
+    color: var(--dim);
+}
+
+.checkGrid > span:nth-child(even) {
+    overflow-wrap: anywhere;
+}
+
 /* ---- status ---- */
 
 .headline {

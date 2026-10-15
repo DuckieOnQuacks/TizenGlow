@@ -44,6 +44,7 @@ function onOpen() {
     send({ event: events.ReadConfig, key: 'nativeVersion' });
     for (const key of wledKeys) send({ event: events.ReadConfig, key });
     readCaptureStatus();
+    runConnectionCheck();
     // One timer each, however often this runs.
     clearInterval(ssdpTimer);
     clearInterval(statusTimer);
@@ -279,6 +280,56 @@ const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersi
 function readCaptureStatus() {
     for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
     send({ event: events.ReadConfig, key: 'captureStats' });
+    send({ event: events.ReadConfig, key: 'connectionAudit' });
+}
+
+// ---- Connection check (diagnostic build) ----
+// Settings are to be limited to the TV itself. Before that is enforced, this records how the real page
+// reaches the service: the address the service sees for this page, whether the page can also reach the
+// service over loopback, and whether a loopback-only listener works on this TV.
+
+function runConnectionCheck() {
+    setText('checkMain', `ws://${deviceIP}:8086`);
+    probe('checkLoop8086', 'ws://127.0.0.1:8086',
+        ws => ws.send(JSON.stringify({ event: events.ReadConfig, key: 'connectionAudit' })),
+        m => m.key === 'connectionAudit' && m.value && m.value.you ? `works, service saw ${m.value.you.remote} (${m.value.you.reason})` : null);
+    probe('checkLoop8087', 'ws://127.0.0.1:8087', null,
+        m => m.probe === 'ok' ? `works, listener saw ${m.remote}` : null);
+}
+
+// Opens a throwaway socket and reports what happened; never touches the page's main connection.
+function probe(id, url, onopen, describe) {
+    const started = Date.now();
+    let done = false, ws = null;
+    const finish = text => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        setText(id, text);
+        try { ws.close(); } catch (e) { }
+    };
+    const timer = setTimeout(() => finish('no answer within 3 s'), 3000);
+    setText(id, 'testing...');
+    try { ws = new WebSocket(url); } catch (e) { return finish(`failed: ${e.message}`); }
+    ws.onopen = () => { if (onopen) onopen(ws); };
+    ws.onmessage = m => {
+        let text = null;
+        try { text = describe(JSON.parse(m.data)); } catch (e) { }
+        finish(`${text || 'unexpected reply'} (${Date.now() - started} ms)`);
+    };
+    ws.onerror = () => finish('could not connect');
+}
+
+function showConnectionAudit(msg) {
+    const a = msg.error ? null : msg.value;
+    if (!a || !a.you) return setText('checkYou', 'not reported (service older than this build)');
+    setText('checkYou', `${a.you.remote}: ${a.you.reason}, ${a.you.allowed ? 'allowed' : 'would be refused'}`);
+    setText('checkProbe', a.probe || '-');
+    setText('checkOwn', a.own && a.own.length ? a.own.join(', ') : (a.ownError || 'none found'));
+    const others = (a.refused || []).map(r => `${r.address} x${r.count} (last ${r.last})`);
+    if (a.refusedOther) others.push(`${a.refusedOther} more`);
+    setText('checkOthers', others.length ? others.join(', ') : 'none');
+    setText('checkEnforce', a.enforce ? 'on: other devices are refused' : 'off in this build: other devices are only recorded');
 }
 
 // Only touch the DOM on change; status is refreshed every second.
@@ -346,6 +397,8 @@ function onMessage(data) {
                 showTargetFps(msg.error ? 25 : Number(msg.value));
             } else if (msg.key === 'captureMode') {
                 showCaptureMode(msg.error ? 'balanced' : msg.value);
+            } else if (msg.key === 'connectionAudit') {
+                showConnectionAudit(msg);
             } else if (msg.key === 'nativeVersion') {
                 showVersions(msg.error ? null : String(msg.value));
             } else if (msg.key === 'outputMode') {
