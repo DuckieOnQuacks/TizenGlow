@@ -129,6 +129,26 @@ Packets follow WLED's receiver (`wled00/e131.cpp`): 10-byte header, version 1, d
 
 Native Capture Status shows the output, its target and state (`ready`, `sending`, `testing`, `send error`, `no LED layout`, `not configured`; UDP has no connection, so there is no "connected"), LED count, packets per frame, last send time, DDP frames, packets and errors, and the last output error. A failed send never stops capture: it is counted and retried after 1 second. **Peak sample** is the largest raw value the capture API returned; above 255 means the TV returns more than 8 bits per channel, which both outputs currently clip at 255.
 
+## Calibration screen
+
+**Open Calibration Screen** (under Output) fills the TV with test patterns. The TV shows them like any other picture, so they go through the whole path: screen, Samsung capture, HyperTizen, then WLED Direct or HyperHDR, then the LEDs. Nothing is sent to the LEDs directly; **Test WLED** is still the test for the network side only. Capture must be enabled and running (the info box warns when it isn't).
+
+| Pattern | What the LEDs should do |
+|---|---|
+| Full Red, Green, Blue, White (`#FF0000`, `#00FF00`, `#0000FF`, `#FFFFFF`) | Every LED that colour |
+| Full Black (`#000000`) | All off; checks the black threshold |
+| Hue Gradient | Red, yellow, green, cyan, blue, magenta, red from left to right (top and bottom edges) |
+| Four Edges | Top red, right green, bottom blue, left yellow |
+| Four Corners | Top-left red, top-right green, bottom-right blue, bottom-left yellow |
+| Moving Edge Marker | A white block going clockwise round the edge, 2.5 s per lap; shows orientation, latency and smoothing |
+| Edge Rainbow | The rainbow clockwise from the top-left corner, in the same order as round the screen |
+
+Remote: **LEFT / RIGHT** previous / next pattern, **OK** pauses the marker (on other patterns it shows or hides the info box), **UP / DOWN** make the marker faster / slower (1.5 to 10 s per lap), **BACK** returns to the settings on the last pattern used.
+
+The info box sits in the middle of the screen, where nothing is sampled, and hides itself (after 2.5 s on the full-screen colours, 8 s otherwise); any key shows it again. To protect OLED panels, the screen closes after 10 minutes without a key press on any still pattern; only the moving marker keeps running.
+
+Edge bands are 12.5% of the screen deep and corner blocks a third of it each way; the capture samples sit 5-7% in from the edges. Colours are exact CSS colours and gradients (no canvas, filters or opacity); the hue gradients have a stop at every 60 degrees, so they are exact hues throughout.
+
 ## Releasing a new version
 
 1. Set the same version in `HyperTizen/tizen-manifest.xml`, `package.json` and `uiVersion` in `HyperTizenUI/js/wsClient.js`.

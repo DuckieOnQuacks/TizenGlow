@@ -7,6 +7,7 @@
     <title>HyperTizen</title>
     <link rel="stylesheet" href="main.css">
     <script src="js/wsClient.js"></script>
+    <script src="js/calibration.js"></script>
     <script type="text/javascript" src="$WEBAPIS/webapis/webapis.js"></script>
 </head>
 
@@ -33,6 +34,12 @@
             <section class="card">
                 <h2>Output</h2>
                 <button id="outputMode" data-step="stepOutputMode" onclick="stepOutputMode(1, true)">Output: <span class="active">HyperHDR</span> | WLED Direct</button>
+            </section>
+
+            <section class="card">
+                <h2>Calibration</h2>
+                <button id="calibrationOpen" onclick="openCalibration()">Open Calibration Screen</button>
+                <p id="calibrationStatus" class="hint">Full-screen test patterns shown by the TV, so the LEDs follow them through the normal capture and output. Enable capture first.</p>
             </section>
 
             <div id="hyperhdrSection" class="hyperhdrOnly">

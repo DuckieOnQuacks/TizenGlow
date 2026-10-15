@@ -377,3 +377,58 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
     font-size: 23px;
     overflow-wrap: anywhere;
 }
+
+/* ---- calibration screen (js/calibration.js): exact colours only, so no filters, opacity or blending ---- */
+#calibration {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 100;
+    overflow: hidden;
+    background: #000000;
+    cursor: none;
+}
+
+#calStage > div {
+    position: absolute;
+}
+
+/* In the middle, clear of the edge bands and corner blocks the capture samples. */
+#calInfo {
+    position: absolute;
+    left: 22%;
+    width: 56%;
+    top: 50%;
+    transform: translateY(-50%);
+    max-height: 30%; /* the corner blocks start a third of the way in */
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 20px 32px;
+    border: 2px solid var(--line);
+    border-radius: 16px;
+    background: #000000;
+    color: var(--dim);
+    font-size: 24px;
+    text-align: center;
+}
+
+#calInfo p {
+    margin: 8px 0;
+}
+
+#calName {
+    color: var(--text);
+    font-size: 34px;
+    font-weight: 700;
+}
+
+#calWarn {
+    color: var(--warn);
+}
+
+#calWarn:empty {
+    display: none;
+}
