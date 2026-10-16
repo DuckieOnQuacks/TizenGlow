@@ -29,27 +29,14 @@ namespace TizenGlow
             }
         }
 
-        private static CapturePoint[] _capturedPoints = new CapturePoint[] {
-            new CapturePoint(0.21, 0.05),
-            new CapturePoint(0.45, 0.05),
-            new CapturePoint(0.7, 0.05),
-            new CapturePoint(0.93, 0.07),
-            new CapturePoint(0.95, 0.275),
-            new CapturePoint(0.95, 0.5),
-            new CapturePoint(0.95, 0.8),
-            new CapturePoint(0.79, 0.95),
-            new CapturePoint(0.65, 0.95),
-            new CapturePoint(0.35, 0.95),
-            new CapturePoint(0.15, 0.95),
-            new CapturePoint(0.05, 0.725),
-            new CapturePoint(0.05, 0.4),
-            new CapturePoint(0.05, 0.2)
-            // Two mid-screen points (0.35, 0.5) and (0.65, 0.5) used to follow. Neither output ever used
-            // them, and with the firmware's usual 2 points per round they cost a whole extra round.
-        };
-        
-        /// <summary>The screen positions sampled each frame (WLED Direct maps LEDs from them).</summary>
+        // The capture loop sets these each frame from the Capture mode (PointSet) and the black-bar state.
+        private static volatile CapturePoint[] _capturedPoints = CaptureMode.Balanced.Points.Points;
+
+        /// <summary>The screen positions sampled each frame.</summary>
         public static CapturePoint[] CapturePoints { get { return _capturedPoints; } }
+
+        /// <summary>What the panel reported: points per round, wait per round, resolution. Zero until the condition is read.</summary>
+        public static Condition CurrentCondition { get { return _condition; } }
 
         /// <summary>Panel size from the last successful condition read, e.g. "3840x2160", else null.</summary>
         public static string Resolution { get { return _api != null ? _condition.Width + "x" + _condition.Height : null; } }
@@ -232,51 +219,26 @@ namespace TizenGlow
             return colorData;
         }
 
-        public static string ToImage(Color[] colors)
+        /// <summary>
+        /// The HyperHDR frame: a 64x48 PNG whose border strips (4 rows top and bottom, 3 columns left and
+        /// right) show the nearest sample of that edge by position, so any point set and the moved-in rows
+        /// for black bars land in the right place. The middle is black.
+        /// </summary>
+        public static string ToImage(Color[] colors, PointSet points)
         {
             using (var image = new SKBitmap(64, 48))
             {
-                for (int x = 0; x < 64; x++)
-                {
-                    Color color = colors[x / 16];
-                    SKColor sKColor = ClampColor(color);
-                    for (int y = 0; y < 4; y++)
-                    {
-                        image.SetPixel(x, y, sKColor);
-                    }
-                }
-
-                // Bottom points 7-10 run right to left (x = 0.79 ... 0.15) and left points 11-13 bottom to
-                // top (y = 0.725 ... 0.2), so both strips are painted in reverse index order. They used to
-                // be painted forwards, which mirrored HyperHDR's bottom and left edges.
-                for (int x = 0; x < 64; x++)
-                {
-                    Color color = colors[10 - x / 16];
-                    SKColor sKColor = ClampColor(color);
-                    for (int y = 44; y < 48; y++)
-                    {
-                        image.SetPixel(x, y, sKColor);
-                    }
-                }
-
+                var edgeColors = new SKColor[64];
+                for (int x = 0; x < 64; x++) edgeColors[x] = EdgeColor(colors, points, 0, (x + 0.5) / 64);
+                for (int x = 0; x < 64; x++) for (int y = 0; y < 4; y++) image.SetPixel(x, y, edgeColors[x]);
+                for (int x = 0; x < 64; x++) edgeColors[x] = EdgeColor(colors, points, 2, 1 - (x + 0.5) / 64); // bottom runs right to left
+                for (int x = 0; x < 64; x++) for (int y = 44; y < 48; y++) image.SetPixel(x, y, edgeColors[x]);
                 for (int y = 0; y < 48; y++)
                 {
-                    Color color = colors[13 - y / 16];
-                    SKColor sKColor = ClampColor(color);
-                    for (int x = 0; x < 3; x++)
-                    {
-                        image.SetPixel(x, y, sKColor);
-                    }
-                }
-
-                for (int y = 0; y < 48; y++)
-                {
-                    Color color = colors[4 + y / 16];
-                    SKColor sKColor = ClampColor(color);
-                    for (int x = 61; x < 64; x++)
-                    {
-                        image.SetPixel(x, y, sKColor);
-                    }
+                    SKColor left = EdgeColor(colors, points, 3, 1 - (y + 0.5) / 48); // left runs bottom to top
+                    SKColor right = EdgeColor(colors, points, 1, (y + 0.5) / 48);
+                    for (int x = 0; x < 3; x++) image.SetPixel(x, y, left);
+                    for (int x = 61; x < 64; x++) image.SetPixel(x, y, right);
                 }
 
                 using (var memoryStream = new MemoryStream())
@@ -290,6 +252,12 @@ namespace TizenGlow
                     return base64String;
                 }
             }
+        }
+
+        private static SKColor EdgeColor(Color[] colors, PointSet points, int edge, double t)
+        {
+            int i = points.Nearest(edge, t);
+            return i < 0 || i >= colors.Length ? new SKColor(0, 0, 0) : ClampColor(colors[i]);
         }
 
         static SKColor ClampColor(Color color)

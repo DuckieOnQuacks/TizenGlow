@@ -83,6 +83,12 @@ namespace TizenGlow.WebSocket
             if (Preference.Contains("wledBrightness")) Wled.TrySetBrightness(Preference.Get<string>("wledBrightness"));
             if (Preference.Contains("wledBlackThreshold")) Wled.TrySetBlackThreshold(Preference.Get<string>("wledBlackThreshold"));
             if (Preference.Contains("wledSmoothing")) Wled.TrySetSmoothing(Preference.Get<string>("wledSmoothing"));
+            if (Preference.Contains("wledGamma")) Wled.TrySetGamma(Preference.Get<string>("wledGamma"));
+            if (Preference.Contains("wledSaturation")) Wled.TrySetSaturation(Preference.Get<string>("wledSaturation"));
+            if (Preference.Contains("letterbox")) Letterbox.TrySetMode(Preference.Get<string>("letterbox"));
+            if (Preference.Contains("levels")) Levels.TrySetEnabled(Preference.Get<string>("levels"));
+            if (Preference.Contains("levelsWhite")) Levels.TrySetWhite(Preference.Get<string>("levelsWhite"));
+            if (Preference.Contains("levelsBlack")) Levels.TrySetBlack(Preference.Get<string>("levelsBlack"));
             _output = Preference.Contains("outputMode") && Preference.Get<string>("outputMode") == "wled" ? (IFrameOutput)Wled : HyperHdr;
 
             Task.Run(() => Start());
@@ -118,6 +124,18 @@ namespace TizenGlow.WebSocket
             s.outputTarget = output.Target;
             s.outputState = output.State;
             if (output == Wled) Wled.Describe(s);
+
+            PointSet points = Letterbox.Inset ? _mode.BarsPoints : _mode.Points;
+            Condition condition = Capturer.CurrentCondition;
+            s.points = points.Count;
+            s.pointsPerEdge = points.Describe();
+            s.capturePoints = new double[points.Count][];
+            for (int i = 0; i < points.Count; i++) s.capturePoints[i] = new[] { Math.Round(points.Points[i].X, 4), Math.Round(points.Points[i].Y, 4) };
+            s.pointsPerRound = condition.ScreenCapturePoints;
+            s.sleepMs = condition.SleepMS;
+            s.ceilingFps = points.CeilingFps(condition.ScreenCapturePoints, condition.SleepMS);
+            s.letterbox = Letterbox.State;
+            s.levels = new CaptureStats.LevelsInfo { enabled = Levels.Enabled, white = Levels.White, black = Levels.Black, measuring = Levels.Measuring, result = Levels.Result };
             return s;
         }
 
@@ -165,10 +183,16 @@ namespace TizenGlow.WebSocket
                 int peak = 0;
                 try
                 {
+                    bool probe;
+                    PointSet points = Letterbox.Choose(mode, start, out probe);
+                    Capturer.SetCapturePoints(points.Points);
                     Color[] colors = Capturer.GetColors();
                     captured = Stats.Now();
                     foreach (Color c in colors) peak = Math.Max(peak, Math.Max(c.R, Math.Max(c.G, c.B)));
-                    output.Prepare(colors);
+                    Levels.Observe(colors, captured);
+                    points = Letterbox.AfterCapture(colors, points, probe, mode, captured);
+                    Levels.Apply(colors);
+                    output.Prepare(colors, points);
                     prepared = Stats.Now();
                 }
                 catch (Exception e)
@@ -220,7 +244,11 @@ namespace TizenGlow.WebSocket
         {
             if (App.Configuration.Enabled) App.Configuration.Enabled = false;
             IFrameOutput output = _output;
-            output.Prepare(Capturer.GetColors());
+            PointSet points = Letterbox.Inset ? _mode.BarsPoints : _mode.Points;
+            Capturer.SetCapturePoints(points.Points);
+            Color[] colors = Capturer.GetColors();
+            Levels.Apply(colors);
+            output.Prepare(colors, points);
             await output.SendAsync();
         }
     }

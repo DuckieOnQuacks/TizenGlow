@@ -140,6 +140,14 @@ namespace TizenGlow
             while (_frames.Count > 0 && _frames.Peek().EndMs <= now - WindowMs) _frames.Dequeue();
         }
 
+        public sealed class LevelsInfo
+        {
+            public bool enabled;
+            public string white, black;
+            public bool measuring;
+            public string result;
+        }
+
         /// <summary>Serialized as the "captureStats" ReadConfig value. Rates and averages are null until MinSpanMs of data exists.</summary>
         public sealed class Snapshot
         {
@@ -158,8 +166,19 @@ namespace TizenGlow
             public long droppedFrames;
             public double windowMs;
 
-            /// <summary>Largest raw sample channel value in the window. Over 255 means the capture API returns more than 8 bits (both outputs clamp at 255).</summary>
+            /// <summary>Largest raw sample channel value in the window (before levels). Over 255 means the capture API returns more than 8 bits (both outputs clamp at 255).</summary>
             public int? peakSample;
+
+            // The points a frame samples (the Capture mode, moved in for black bars) and what the firmware allows.
+            public int points;
+            public string pointsPerEdge;
+            public double[][] capturePoints;
+            public int pointsPerRound;
+            public int sleepMs;
+            public double? ceilingFps;
+            /// <summary>Black bars: off, watching, detected or always.</summary>
+            public string letterbox;
+            public LevelsInfo levels;
 
             // Active output, filled by HyperionClient / the output.
             public string output;

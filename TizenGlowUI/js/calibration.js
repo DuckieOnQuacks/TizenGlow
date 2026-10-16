@@ -9,7 +9,7 @@
 const calibration = (() => {
     const BAND = 0.125;                      // edge band depth
     const CORNER = 1 / 3;                    // corner blocks: each reaches samples on both of its edges
-    const MARKER = 1 / 9;                    // marker length, share of the perimeter: wider than any gap between samples
+    const MARKER = 1 / 9;                    // marker length, share of the perimeter, at least: it must cover every gap between samples
     const LAPS = [1.5, 2, 2.5, 3, 4, 6, 10]; // marker seconds per lap; UP = faster
     const IDLE_MS = 10 * 60 * 1000;          // still patterns close after 10 min without a key (OLED)
     const INFO_MS = { still: 8000, uniform: 2500 };
@@ -51,9 +51,34 @@ const calibration = (() => {
         }
     }
 
+    // The TV's sample points, from the service's stats (x, y in screen fractions); the Balanced set until known.
+    function samplePoints() {
+        const fromStats = typeof lastStats !== 'undefined' && lastStats && lastStats.capturePoints;
+        if (fromStats && fromStats.length) return fromStats;
+        return [[0.25, 0.05], [0.75, 0.05], [0.95, 0.25], [0.95, 0.75], [0.75, 0.95], [0.25, 0.95], [0.05, 0.75], [0.05, 0.25]];
+    }
+
+    // Where a sample sits along the perimeter (pixels clockwise from the top-left corner).
+    function perimeterPosition(p, W, H) {
+        const [x, y] = p;
+        if (x <= 0.06) return 2 * W + H + (1 - y) * H;     // left column (5% in), bottom to top
+        if (x >= 0.94) return W + y * H;                   // right column, top to bottom
+        return y < 0.5 ? x * W : W + H + (1 - x) * W;      // top or bottom row (moved in for black bars at most)
+    }
+
+    // Marker length as a share of the perimeter: MARKER, or 15% more than the widest gap between samples,
+    // so the block always lights at least one sample wherever it is (Fast has one sample per side).
+    function markerShare(W, H) {
+        const P = 2 * (W + H);
+        const pos = samplePoints().map(p => perimeterPosition(p, W, H)).sort((a, b) => a - b);
+        let gap = 0;
+        for (let i = 0; i < pos.length; i++) gap = Math.max(gap, (i + 1 < pos.length ? pos[i + 1] : pos[0] + P) - pos[i]);
+        return Math.min(0.5, Math.max(MARKER, 1.15 * gap / P));
+    }
+
     // White block, `phase` (0..1) of the way round; split over two sides at a corner.
     function marker(W, H, phase) {
-        const P = 2 * (W + H), L = P * MARKER, a = phase * P, out = [];
+        const P = 2 * (W + H), L = P * markerShare(W, H), a = phase * P, out = [];
         let start = 0;
         sideLengths(W, H).forEach((len, side) => {
             for (const shift of [0, P]) { // the block wraps past the top-left corner
@@ -68,7 +93,7 @@ const calibration = (() => {
     // Side the middle of the marker is on.
     function markerSide(W, H, phase) {
         const P = 2 * (W + H);
-        let p = (phase * P + P * MARKER / 2) % P, side = 0;
+        let p = (phase * P + P * markerShare(W, H) / 2) % P, side = 0;
         for (const len of sideLengths(W, H)) { if (p < len) break; p -= len; side++; }
         return sideNames[side];
     }
@@ -103,6 +128,10 @@ const calibration = (() => {
                 rect(1 - CORNER, 1 - CORNER, CORNER, CORNER, '#0000FF'), rect(0, 1 - CORNER, CORNER, CORNER, '#FFFF00')],
         },
         { name: 'Moving Edge Marker', info: 'A white block going clockwise round the edge', animated: true, rects: marker },
+        {
+            name: 'Sample Points', info: 'Where the TV samples the picture: the LEDs follow only these spots',
+            rects: () => samplePoints().map(([x, y]) => rect(x - 0.015, y - 0.02665, 0.03, 0.0533, '#FFFFFF')), // 3% wide, the same on screen tall
+        },
         { name: 'Edge Rainbow', info: 'Red, yellow, green, cyan, blue, magenta clockwise from the top-left corner', rects: rainbow },
     ];
 
@@ -175,6 +204,7 @@ const calibration = (() => {
     const wled = () => typeof outputSel !== 'undefined' && outputSel.value === 'wled';
 
     function showText() {
+        if (wizard) return showWizardText();
         const p = patterns[index];
         setLine(nameLine, `${index + 1} / ${patterns.length}   ${p.name}`);
         setLine(infoLine, !p.animated ? p.info
@@ -183,7 +213,8 @@ const calibration = (() => {
         setLine(warnLine, state === 'running' ? '' : `Capture isn't running (${state.split(' (')[0]}), so the LEDs won't follow this screen.`);
         const count = read('statLedCount');
         const shift = typeof ledShift === 'undefined' || ledShift === 0 ? '' : `, LED shift ${ledShift > 0 ? '+' : ''}${ledShift}`;
-        setLine(statsLine, `Capture ${read('detectedApi')}, ${read('statCaptureFps')} fps captured, ${read('statSendFps')} fps sent. `
+        const points = typeof lastStats !== 'undefined' && lastStats && lastStats.points ? `${lastStats.points} points, ` : '';
+        setLine(statsLine, `Capture ${read('detectedApi')}, ${points}${read('statCaptureFps')} fps captured, ${read('statSendFps')} fps sent. `
             + `Output ${wled() ? `WLED Direct${/^\d+$/.test(count) ? `, ${count} LEDs` : count === '-' ? '' : `, ${count}`}${shift}` : 'HyperHDR'}`);
         setLine(keysLine, p.animated ? 'LEFT / RIGHT pattern    OK pause    UP / DOWN speed    BACK exit'
             : wled() ? 'LEFT / RIGHT pattern    UP / DOWN shift LEDs    OK hide info    BACK exit'
@@ -206,9 +237,82 @@ const calibration = (() => {
     }
 
     function tick() {
+        if (wizard) wizardTick();
         if (infoBox.style.display !== 'none') showText();
         const moving = patterns[index].animated && !paused;
         if (!moving && Date.now() - lastKey >= IDLE_MS) close('timeout');
+    }
+
+    // ---- Levels wizard: Full White, measure; Full Black, measure; back to the settings with the result ----
+    const WIZARD = { settleMs: 1500, timeoutMs: 20000 };
+    let wizard = null, wizardTimer = null;
+
+    function calibrateLevels() {
+        const status = document.getElementById('levelsStatus');
+        if (typeof connected !== 'function' || !connected()) {
+            if (status) { status.className = 'hint warn'; status.textContent = 'Not connected to the TizenGlow service yet, try again in a moment.'; }
+            return;
+        }
+        if (read('captureState') !== 'running') {
+            if (status) { status.className = 'hint warn'; status.textContent = 'Enable capture first: levels are measured through the running capture.'; }
+            return;
+        }
+        if (!isOpen) open();
+        wizard = { step: 'white', results: [], sentAt: 0 };
+        wizardStep('white');
+    }
+
+    function wizardStep(step) {
+        wizard.step = step;
+        wizard.sentAt = 0;
+        show(step === 'white' ? 3 : 4); // Full White / Full Black
+        clearTimeout(infoTimer);
+        infoBox.style.display = '';
+        showWizardText();
+        clearTimeout(wizardTimer);
+        wizardTimer = setTimeout(() => {
+            if (!wizard || wizard.step !== step) return;
+            // A stats reply already in flight may still carry the previous result: only a new one counts.
+            const lv = typeof lastStats !== 'undefined' && lastStats && lastStats.levels;
+            wizard.before = lv ? lv.result : null;
+            wizard.sentAt = Date.now();
+            send({ event: events.SetConfig, key: 'measureLevels', value: step });
+            showWizardText();
+        }, WIZARD.settleMs);
+    }
+
+    function showWizardText() {
+        setLine(nameLine, `Calibrating levels: ${wizard.step}`);
+        setLine(infoLine, wizard.sentAt ? `Measuring ${wizard.step}... keep the screen as it is` : `Showing full ${wizard.step}; measuring in a moment`);
+        setLine(warnLine, '');
+        setLine(statsLine, wizard.results.join('. '));
+        setLine(keysLine, 'BACK cancels');
+    }
+
+    function wizardTick() {
+        if (!wizard.sentAt) return;
+        const lv = typeof lastStats !== 'undefined' && lastStats && lastStats.levels;
+        const done = lv && !lv.measuring && lv.result && lv.result !== wizard.before && lv.result.indexOf(wizard.step + ' ') === 0;
+        if (!done && Date.now() - wizard.sentAt < WIZARD.timeoutMs) return;
+        wizard.results.push(done ? lv.result : `${wizard.step}: no answer from the service`);
+        if (wizard.step === 'white') return wizardStep('black');
+        const results = wizard.results;
+        wizard = null;
+        close('levels');
+        const status = document.getElementById('levelsStatus');
+        if (status) {
+            status.className = results.some(r => /not measured|no answer/.test(r)) ? 'hint warn' : 'hint';
+            status.textContent = results.map(r => r.charAt(0).toUpperCase() + r.slice(1) + (/[.?!]$/.test(r) ? '' : '.')).join(' ');
+            status.dataset.result = results[results.length - 1];
+        }
+    }
+
+    function cancelWizard() {
+        if (!wizard) return;
+        wizard = null;
+        clearTimeout(wizardTimer);
+        const status = document.getElementById('levelsStatus');
+        if (status) { status.className = 'hint'; status.textContent = 'Calibration cancelled.'; }
     }
 
     function open() {
@@ -229,11 +333,12 @@ const calibration = (() => {
         stopFrames();
         clearInterval(tickTimer);
         clearTimeout(infoTimer);
+        clearTimeout(wizardTimer);
         const status = document.getElementById('calibrationStatus');
-        if (status) status.textContent = reason === 'timeout'
+        if (status && reason !== 'levels') status.textContent = reason === 'timeout'
             ? 'Calibration closed after 10 minutes without a key press, to protect the screen.'
             : `Last pattern: ${patterns[index].name}. Opens there next time.`;
-        const button = document.getElementById('calibrationOpen');
+        const button = document.getElementById(reason === 'levels' ? 'levelsCalibrate' : 'calibrationOpen');
         if (button) button.focus();
     }
 
@@ -265,6 +370,7 @@ const calibration = (() => {
         lastKey = Date.now();
         const key = keyCodes[e.keyCode] === 'back' ? 'back' : keyNames[e.key] || keyCodes[e.keyCode];
         const p = patterns[index];
+        if (wizard) { cancelWizard(); return close('levels'); } // any key cancels the measurement
         if (key === 'back') return close();
         if (key === 'left' || key === 'right') show(index + (key === 'right' ? 1 : -1));
         else if (key === 'ok' && !p.animated) return infoBox.style.display === 'none' ? showInfo() : hideInfo();
@@ -276,9 +382,10 @@ const calibration = (() => {
     }, true);
 
     return {
-        open, close, patterns, hue, hueGradient, marker, markerSide, rainbow, BAND, CORNER, MARKER, LAPS, IDLE_MS,
-        state: () => ({ isOpen, index, lap, paused, info: !!root && infoBox.style.display !== 'none' }),
+        open, close, calibrateLevels, patterns, hue, hueGradient, marker, markerSide, markerShare, samplePoints, rainbow, BAND, CORNER, MARKER, LAPS, IDLE_MS, WIZARD,
+        state: () => ({ isOpen, index, lap, paused, info: !!root && infoBox.style.display !== 'none', wizard: wizard ? wizard.step : null }),
     };
 })();
 
 window.openCalibration = calibration.open;
+window.calibrateLevels = calibration.calibrateLevels;

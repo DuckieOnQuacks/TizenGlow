@@ -26,9 +26,10 @@
             <section class="card">
                 <h2>Capture</h2>
                 <label class="toggle" for="enabled"><input type="checkbox" id="enabled"><span>Capture enabled</span></label>
-                <button id="captureMode" data-step="stepCaptureMode" onclick="stepCaptureMode(1, true)">Capture Quality: Fast | <span class="active">Balanced</span> | Smooth</button>
-                <button id="targetFps" data-step="stepTargetFps" onclick="stepTargetFps(1, true)">Target FPS: &lt; 25 &gt;</button>
-                <p class="hint">OK cycles a setting, LEFT / RIGHT step through it.</p>
+                <button id="captureMode" data-step="stepCaptureMode" onclick="stepCaptureMode(1, true)">Capture: Fast | <span class="active">Balanced</span> | Detailed</button>
+                <button id="targetFps" data-step="stepTargetFps" onclick="stepTargetFps(1, true)">Target FPS: &lt; 15 &gt;</button>
+                <button id="letterbox" data-step="stepLetterbox" onclick="stepLetterbox(1, true)">Black bars: &lt; Auto &gt;</button>
+                <p class="hint">Fast samples 6 points, Balanced 8, Detailed 14: fewer points, faster frames (the TV waits after every 2). Black bars: Auto moves the top and bottom samples into the picture when a film is letterboxed. OK cycles a setting, LEFT / RIGHT step through it.</p>
             </section>
 
             <section class="card">
@@ -116,7 +117,18 @@
                         <button id="wledBrightness" data-step="stepBrightness" onclick="stepBrightness(1, true)">Brightness: &lt; 100% &gt;</button>
                         <button id="wledBlackThreshold" data-step="stepBlackThreshold" onclick="stepBlackThreshold(1, true)">Black threshold: &lt; 0% &gt;</button>
                         <button id="wledSmoothing" data-step="stepSmoothing" onclick="stepSmoothing(1, true)">Smoothing: &lt; On &gt;</button>
-                        <p class="hint">Smoothing follows Capture Quality: Fast 50 ms, Balanced 90 ms, Smooth 150 ms.</p>
+                        <button id="wledSaturation" data-step="stepSaturation" onclick="stepSaturation(1, true)">Saturation: &lt; 100% &gt;</button>
+                        <button id="wledGamma" data-step="stepGamma" onclick="stepGamma(1, true)">Gamma: &lt; 1.0 &gt;</button>
+                        <p class="hint">Smoothing follows Capture: Fast 60 ms, Balanced 100 ms, Detailed 150 ms; while it is on, the strip glides between frames. Gamma above 1 deepens dark colours.</p>
+                    </div>
+                </section>
+
+                <section class="card">
+                    <h2>Levels</h2>
+                    <div class="form">
+                        <button id="levels" data-step="stepLevels" onclick="stepLevels(1, true)">Levels: &lt; On &gt;</button>
+                        <button id="levelsCalibrate" onclick="calibrateLevels()">Calibrate levels (white and black)</button>
+                        <p id="levelsStatus" class="hint">Measures what the TV's capture returns for a full white and a full black screen, then stretches every frame so white is white and black is black. Takes about 10 seconds with capture running; both outputs use it.</p>
                     </div>
                 </section>
             </div>
@@ -145,7 +157,11 @@
                 <span>Target</span><span id="statOutputTarget" class="wide">-</span>
                 <span>API</span><span class="wide"><span id="detectedApi">-</span> (Tizen <span id="detectedPlatformVersion">-</span>)</span>
                 <span>Peak sample</span><span id="statPeak" class="wide">-</span>
+                <span>Points</span><span id="statPoints" class="wide">-</span>
+                <span>Black bars</span><span id="statLetterbox">-</span>
+                <span>Levels</span><span id="statLevels">-</span>
             </div>
+            <canvas id="ledPreview" class="wledOnly" width="320" height="180"></canvas>
             <div id="wledStatsGrid" class="wledOnly">
                 <span>LED count</span><span id="statLedCount">-</span>
                 <span>Packets/frame</span><span id="statPackets">-</span>

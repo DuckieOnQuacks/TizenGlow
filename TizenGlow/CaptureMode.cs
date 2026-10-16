@@ -1,15 +1,20 @@
 namespace TizenGlow
 {
     /// <summary>
-    /// User-facing capture presets. Each sets only parameters the capture loop really has; sampling
-    /// density is not one of them (14 fixed points, batched by the firmware's ScreenCapturePoints, mapped
-    /// one-to-one onto ToImage's border strips). Colour smoothing applies only to WLED Direct; HyperHDR smooths its own.
+    /// User-facing capture presets. The main choice is how many points a frame samples: the firmware reads
+    /// ScreenCapturePoints per round and waits SleepMS after each, so a frame takes rounds x wait (on an
+    /// S90D: 2 per round, 20 ms, so 6 points is 60 ms and 14 points 140 ms). Fewer points means faster,
+    /// lower-latency frames and coarser colour along each edge. Colour smoothing applies only to WLED
+    /// Direct; HyperHDR smooths its own.
     /// </summary>
     public sealed class CaptureMode
     {
         /// <summary>Stored in the "captureMode" preference.</summary>
         public string Name;
         public string Label;
+
+        /// <summary>The points a frame samples, and the same with the rows moved in for black bars.</summary>
+        public PointSet Points, BarsPoints;
 
         /// <summary>Target FPS applied when the mode is picked; the Target FPS setting can still fine-tune it.</summary>
         public int TargetFps;
@@ -33,15 +38,26 @@ namespace TizenGlow
         /// </summary>
         public int SmoothingMs;
 
-        public static readonly CaptureMode Fast = new CaptureMode { Name = "fast", Label = "Fast", TargetFps = 30, KeepFrameGrid = false, ErrorBackoffMs = 1000, ConditionRetryMs = 5000, SmoothingMs = 50 };
-        public static readonly CaptureMode Balanced = new CaptureMode { Name = "balanced", Label = "Balanced", TargetFps = 25, KeepFrameGrid = false, ErrorBackoffMs = 5000, ConditionRetryMs = 10000, SmoothingMs = 90 };
-        public static readonly CaptureMode Smooth = new CaptureMode { Name = "smooth", Label = "Smooth", TargetFps = 15, KeepFrameGrid = true, ErrorBackoffMs = 5000, ConditionRetryMs = 10000, SmoothingMs = 150 };
+        public static readonly CaptureMode Fast = Make("fast", "Fast", 2, 1, 2, 1, 20, 1000, 5000, 60);
+        public static readonly CaptureMode Balanced = Make("balanced", "Balanced", 2, 2, 2, 2, 15, 5000, 10000, 100);
+        public static readonly CaptureMode Detailed = Make("detailed", "Detailed", 4, 3, 4, 3, 10, 5000, 10000, 150);
 
-        public static readonly CaptureMode[] All = { Fast, Balanced, Smooth };
+        public static readonly CaptureMode[] All = { Fast, Balanced, Detailed };
 
-        /// <summary>The mode with this stored name, or null.</summary>
+        private static CaptureMode Make(string name, string label, int top, int right, int bottom, int left, int fps, int backoff, int retry, int smoothing)
+        {
+            var points = new PointSet(top, right, bottom, left);
+            return new CaptureMode
+            {
+                Name = name, Label = label, Points = points, BarsPoints = points.WithBars(Letterbox.BarHeight),
+                TargetFps = fps, KeepFrameGrid = false, ErrorBackoffMs = backoff, ConditionRetryMs = retry, SmoothingMs = smoothing,
+            };
+        }
+
+        /// <summary>The mode with this stored name, or null. "smooth" (the old name of the 14-point mode) still finds Detailed.</summary>
         public static CaptureMode Find(string name)
         {
+            if (name == "smooth") return Detailed;
             foreach (CaptureMode mode in All) if (mode.Name == name) return mode;
             return null;
         }

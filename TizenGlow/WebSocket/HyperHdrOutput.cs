@@ -56,9 +56,9 @@ namespace TizenGlow.WebSocket
             });
         }
 
-        public void Prepare(Color[] samples)
+        public void Prepare(Color[] samples, PointSet points)
         {
-            _image = Capturer.ToImage(samples);
+            _image = Capturer.ToImage(samples, points);
         }
 
         /// <summary>True when HyperHDR got the frame.</summary>

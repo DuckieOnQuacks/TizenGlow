@@ -1,8 +1,8 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.0.1';
+const uiVersion = '1.1.0';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
-const minService = '1.0.0';
+const minService = '1.1.0'; // capture modes by points, black bars, levels, gliding, preview
 
 let client;
 let deviceIP;
@@ -46,6 +46,7 @@ function onOpen() {
     send({ event: events.ReadConfig, key: 'targetFps' });
     send({ event: events.ReadConfig, key: 'nativeVersion' });
     for (const key of wledKeys) send({ event: events.ReadConfig, key });
+    for (const key of captureKeys) send({ event: events.ReadConfig, key });
     readCaptureStatus();
     // One timer each, however often this runs.
     clearInterval(ssdpTimer);
@@ -85,14 +86,15 @@ window.stepTargetFps = (step, wrap) => {
     send({ event: events.SetConfig, key: 'targetFps', value: String(next) });
 }
 
-// Must match CaptureMode.cs.
-const captureModes = ['fast', 'balanced', 'smooth'];
-const captureModeLabels = { fast: 'Fast', balanced: 'Balanced', smooth: 'Smooth' };
+// Must match CaptureMode.cs ("smooth" was the old name of the 14-point mode).
+const captureModes = ['fast', 'balanced', 'detailed'];
+const captureModeLabels = { fast: 'Fast', balanced: 'Balanced', detailed: 'Detailed' };
 let captureMode = 'balanced';
 
 function showCaptureMode(mode) {
+    if (mode === 'smooth') mode = 'detailed';
     captureMode = captureModes.indexOf(mode) !== -1 ? mode : 'balanced';
-    document.getElementById('captureMode').innerHTML = 'Capture Quality: ' + captureModes
+    document.getElementById('captureMode').innerHTML = 'Capture: ' + captureModes
         .map(m => m === captureMode ? `<span class="active">${captureModeLabels[m]}</span>` : captureModeLabels[m]).join(' | ');
 }
 
@@ -138,9 +140,22 @@ function showOutputMode(mode) { outputSel.show(mode); }
 const brightnessSel = makeSelector('wledBrightness', [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], 100, v => `Brightness: &lt; ${v}% &gt;`, 'wledBrightness');
 const thresholdSel = makeSelector('wledBlackThreshold', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0, v => `Black threshold: &lt; ${v}% &gt;`, 'wledBlackThreshold');
 const smoothingSel = makeSelector('wledSmoothing', ['on', 'off'], 'on', v => `Smoothing: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'wledSmoothing');
+const saturationSel = makeSelector('wledSaturation', [0, 25, 50, 75, 100, 125, 150, 175, 200], 100, v => `Saturation: &lt; ${v}% &gt;`, 'wledSaturation');
+const gammaValues = ['0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.4', '1.6', '1.8', '2.0', '2.2', '2.4'];
+const gammaSel = makeSelector('wledGamma', gammaValues, '1.0', v => `Gamma: &lt; ${v} &gt;`, 'wledGamma');
 window.stepBrightness = brightnessSel.step;
 window.stepBlackThreshold = thresholdSel.step;
 window.stepSmoothing = smoothingSel.step;
+window.stepSaturation = saturationSel.step;
+window.stepGamma = gammaSel.step;
+
+// Capture-side settings (both outputs): black bars and levels.
+const letterboxLabels = { off: 'Off', auto: 'Auto', on: 'Always' };
+const letterboxSel = makeSelector('letterbox', Object.keys(letterboxLabels), 'auto', v => `Black bars: &lt; ${letterboxLabels[v]} &gt;`, 'letterbox');
+const levelsSel = makeSelector('levels', ['on', 'off'], 'on', v => `Levels: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'levels');
+window.stepLetterbox = letterboxSel.step;
+window.stepLevels = levelsSel.step;
+const captureKeys = ['letterbox', 'levels'];
 
 // LED layout: start corner and direction are saved together with the counts.
 const cornerLabels = { topleft: 'Top Left', topright: 'Top Right', bottomright: 'Bottom Right', bottomleft: 'Bottom Left' };
@@ -150,7 +165,7 @@ const directionSel = makeSelector('ledDirection', Object.keys(directionLabels), 
 window.stepLedStart = cornerSel.step;
 window.stepLedDirection = directionSel.step;
 
-const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift'];
+const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift', 'wledSaturation', 'wledGamma'];
 const ledSides = ['ledTop', 'ledRight', 'ledBottom', 'ledLeft'];
 let wledReady = false;
 
@@ -309,7 +324,11 @@ const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersi
 function readCaptureStatus() {
     for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
     send({ event: events.ReadConfig, key: 'captureStats' });
+    if (outputSel.value === 'wled') send({ event: events.ReadConfig, key: 'ledPreview' });
 }
+
+// The latest captureStats, for the calibration screen (sample points, levels results).
+let lastStats = null;
 
 // Only touch the DOM on change; status is refreshed every second.
 function setText(id, text) {
@@ -326,7 +345,8 @@ function showCaptureStatus(msg) {
 
 // Live numbers from the service (CaptureStats.cs), over its rolling 2 s window.
 function showCaptureStats(msg) {
-    const s = msg.error ? null : msg.value; // error: native older than 1.0.3
+    const s = msg.error ? null : msg.value; // error: no TizenGlow service
+    lastStats = s;
     const num = (v, unit) => !s ? '-' : v === null || v === undefined ? 'measuring' : v.toFixed(1) + (unit || '');
     const running = document.getElementById('captureState').textContent === 'running';
     setText('statMode', s ? s.mode : '-');
@@ -361,6 +381,48 @@ function showCaptureStats(msg) {
     setText('statWledLeds', wledLedCount !== null ? String(wledLedCount) : '-');
     setText('wledInfo', !has(s && s.wledInfo) ? '' : wledLedCount !== null ? `${s.wledInfo}: ${wledLedCount} LEDs` : s.wledInfo);
     showLedTotal();
+
+    // Points, black bars and levels (service 1.1.0+).
+    setText('statPoints', !has(s && s.points) ? '-'
+        : `${s.points} (${s.pointsPerEdge})` + (s.pointsPerRound > 0 ? `, ${s.pointsPerRound} per round` : '')
+        + (s.sleepMs > 0 ? `, ${s.sleepMs} ms wait: max ${s.ceilingFps} fps` : ''));
+    setText('statLetterbox', has(s && s.letterbox) ? s.letterbox : '-');
+    const lv = s && s.levels;
+    setText('statLevels', !lv ? '-' : !lv.enabled ? 'off' : lv.white === '255,255,255' && lv.black === '0,0,0' ? 'not measured' : `white ${lv.white}, black ${lv.black}`);
+    const status = document.getElementById('levelsStatus');
+    if (lv && lv.result && status.dataset.result !== lv.result) {
+        status.dataset.result = lv.result;
+        status.className = /not measured/.test(lv.result) ? 'hint warn' : 'hint';
+        status.textContent = sentence(lv.result) + (lv.measuring ? '' : ` Now: white ${lv.white}, black ${lv.black}.`);
+    }
+}
+
+// "white measured ..." -> "White measured ...." (a result that already ends in ? or . keeps it).
+const sentence = r => r.charAt(0).toUpperCase() + r.slice(1) + (/[.?!]$/.test(r) ? '' : '.');
+
+// ---- LED preview: the last strip WLED got, drawn as a ring in canonical order (top-left clockwise) ----
+function showLedPreview(msg) {
+    const canvas = document.getElementById('ledPreview');
+    if (!canvas || !canvas.getContext) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height, band = 14;
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, W, H);
+    const v = msg.error ? null : msg.value;
+    if (!v || !v.rgb) {
+        ctx.strokeStyle = '#2b3445';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(band / 2, band / 2, W - band, H - band);
+        return;
+    }
+    const bytes = atob(v.rgb);
+    const color = i => `rgb(${bytes.charCodeAt(i * 3)},${bytes.charCodeAt(i * 3 + 1)},${bytes.charCodeAt(i * 3 + 2)})`;
+    let i = 0;
+    const run = (n, place) => { for (let k = 0; k < n; k++, i++) { ctx.fillStyle = color(i); place(k / n, (k + 1) / n); } };
+    run(v.top, (a, b) => ctx.fillRect(a * W, 0, (b - a) * W + 0.5, band));                                  // left to right
+    run(v.right, (a, b) => ctx.fillRect(W - band, a * H, band, (b - a) * H + 0.5));                          // top to bottom
+    run(v.bottom, (a, b) => ctx.fillRect((1 - b) * W, H - band, (b - a) * W + 0.5, band));                   // right to left
+    run(v.left, (a, b) => ctx.fillRect(0, (1 - b) * H, band, (b - a) * H + 0.5));                            // bottom to top
 }
 
 function onMessage(data) {
@@ -392,6 +454,16 @@ function onMessage(data) {
                 smoothingSel.show(msg.error ? 'on' : msg.value);
             } else if (msg.key === 'ledShift') {
                 showLedShift(msg.error ? 0 : Number(msg.value));
+            } else if (msg.key === 'wledSaturation') {
+                saturationSel.show(msg.error ? 100 : Number(msg.value));
+            } else if (msg.key === 'wledGamma') {
+                gammaSel.show(msg.error ? '1.0' : Number(msg.value).toFixed(1));
+            } else if (msg.key === 'letterbox') {
+                letterboxSel.show(msg.error ? 'auto' : msg.value);
+            } else if (msg.key === 'levels') {
+                levelsSel.show(msg.error ? 'on' : msg.value);
+            } else if (msg.key === 'ledPreview') {
+                showLedPreview(msg);
             } else if (msg.key === 'captureStats') {
                 showCaptureStats(msg);
             } else if (captureStatusKeys.indexOf(msg.key) !== -1) {

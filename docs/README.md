@@ -57,10 +57,10 @@ Measured by the service over a rolling 2 second window and refreshed in the UI o
 
 | Field | Meaning |
 |---|---|
-| Mode / Target FPS | Active Capture Quality mode and the frame rate the loop paces to |
+| Mode / Target FPS | Active Capture mode and the frame rate the loop paces to |
 | Capture FPS | Frames that came back from the TV's capture API per second |
 | Send FPS | Frames HyperHDR actually received per second (0 while it is unreachable) |
-| Avg capture time | Time in the capture API per frame (sampling the 14 screen points) |
+| Avg capture time | Time in the capture API per frame (sampling the points) |
 | Avg frame time | Whole loop iteration per frame: capture + image + send + pacing wait. Frame breakdown shows each part |
 | Failed frames | Frames whose capture or image step threw an error |
 | Dropped frames | Frame slots the target asked for that passed without a capture because the previous frame was still running (see below) |
@@ -68,24 +68,33 @@ Measured by the service over a rolling 2 second window and refreshed in the UI o
 
 Dropped frames: with a target of 30 FPS there is a frame slot every 33.3 ms. If a frame takes 92 ms, the slots it ran over are not made up later: frames are never queued, run in parallel or sent in a burst to catch up. Those passed slots are counted as dropped (fractionally per frame, shown rounded down), so dropped per second is about target FPS minus capture FPS. Waiting for the next slot when a frame finished early is normal pacing and never counts as dropped.
 
-### Capture Quality
+### Capture
 
-The **Capture Quality** selector under Enabled picks a preset (OK cycles, LEFT / RIGHT step). Balanced is the default. The choice is remembered, applies to the next frame without restarting capture, and also sets Target FPS, which you can then fine-tune.
+The **Capture** selector under Enabled picks how many points a frame samples (OK cycles, LEFT / RIGHT step). Balanced is the default. The choice is remembered, applies to the next frame without restarting capture, and also sets Target FPS, which you can then fine-tune.
 
-| | Fast | Balanced | Smooth |
+| | Fast | Balanced | Detailed |
 |---|---|---|---|
-| Target FPS | 30 | 25 | 15 |
-| A frame that overruns its slot | next frame starts at once | next frame starts at once | waits for the next slot of the 15 FPS grid, so frames are always whole intervals apart |
+| Points (top / right / bottom / left) | 6 (2 / 1 / 2 / 1) | 8 (2 / 2 / 2 / 2) | 14 (4 / 3 / 4 / 3) |
+| Frame time on an S90D (2 points per round, 20 ms wait) | 60 ms, 16.7 fps | 80 ms, 12.5 fps | 140 ms, 7 fps |
+| Target FPS | 20 | 15 | 10 |
 | Pause after a failed frame | 1 s | 5 s | 5 s |
 | Condition read retry | 5 s | 10 s | 10 s |
 
-The modes do not change how many screen points are sampled: 14 points around the edge (4 top, 3 right, 4 bottom, 3 left) are mapped one-to-one onto the image HyperHDR receives, and the firmware decides how many are read per round. They also do not smooth colours; HyperHDR's own smoothing stays in charge of LED transitions.
+The firmware reads `ScreenCapturePoints` points per round and asks for a pause (`sleepMs` in Condition) after every round, so a frame takes rounds x wait: the point count is the only lever on frame rate and latency. Fewer points means faster, lower-latency frames and coarser colour along each edge (Fast gives each side one colour); more points means finer colour. Points are evenly spaced along each edge, 5% in from it, and both outputs map by position, so any count works. **Points** in the status shows the count, the firmware's numbers and the resulting ceiling. A saved "smooth" mode from older versions becomes Detailed.
+
+### Black bars
+
+Letterboxed films (2.39:1 on a 16:9 screen) leave the top and bottom sample rows in the black bars, so those LEDs stay dark for the whole film. **Black bars** under Capture: **Auto** (default) moves the top and bottom rows in by 12.5% of the screen once every top and bottom sample has been black for 3 seconds while the sides show a picture, and one frame every 5 seconds samples the edge again to move back when the bars are gone (that frame shows the previous rows, so the LEDs never blink). **Always** keeps the rows moved in; **Off** never moves them. The status shows `watching`, `detected`, `always` or `off`. The sides are never moved.
 
 ### Target FPS
 
 The **Target FPS** button under Capture Quality sets how fast the service captures: 10, 15, 20, 25, 30 or 40. Press [OK] to cycle through the values, or [LEFT] / [RIGHT] to step down / up. The change applies to the next frame and is remembered.
 
-Capture, image and send time count toward each frame, so the service only waits for whatever is left of the frame interval. If Capture FPS stays below the target, the TV's capture API is the limit: each frame reads the screen in batches and the firmware asks for a pause (`sleepMs` in Condition) after every batch, so the ceiling is roughly 1000 / ((14 / points) x sleepMs) frames per second.
+Capture, image and send time count toward each frame, so the service only waits for whatever is left of the frame interval. If Capture FPS stays below the target, the TV's capture API is the limit (see Capture above); pick a mode with fewer points.
+
+### Levels
+
+The TV's capture doesn't necessarily return 0 for black and 255 for white (one S90D returns about 170 for white), which leaves the LEDs dim and dull on both outputs. **Calibrate levels** under Levels shows Full White, measures what the capture returns, then Full Black, measures again, and returns to the settings with the result (about 10 seconds; capture must be running). From then on every frame is stretched so the measured white is 255,255,255 and the measured black 0,0,0, per channel, before either output sees it. **Levels: Off** keeps the measurement but stops applying it. A measurement is refused when the samples are dark while measuring white, bright while measuring black, differ too much (the screen wasn't one colour), or leave less than 32 counts between black and white; the status says why. The values can also be typed in over the settings port as `levelsWhite` / `levelsBlack` ("r,g,b").
 
 ## WLED Direct
 
@@ -119,9 +128,11 @@ The layout is one loop clockwise from the top-left corner: top left to right, ri
 |---|---|
 | Brightness 0-100% | Scales every LED before sending. WLED's own brightness setting is never changed |
 | Black threshold 0-10% | An LED whose red, green and blue are all below this share of full scale is sent as off. Judged before brightness |
-| Smoothing On / Off | Time-based exponential smoothing; the time constant follows Capture Quality: Fast 50 ms, Balanced 90 ms, Smooth 150 ms. Off sends each frame as captured |
+| Smoothing On / Off | Time-based exponential smoothing; the time constant follows Capture: Fast 60 ms, Balanced 100 ms, Detailed 150 ms. While it is on, the strip is re-sent at 30 fps between captured frames, so colours glide towards each new frame instead of stepping once per capture (Send FPS shows the DDP rate). Off sends each frame as captured |
+| Saturation 0-200% | 100 as captured, 0 greyscale, 200 doubled (around each LED's brightness) |
+| Gamma 0.6-2.4 | Applied per LED after saturation: above 1 deepens dark colours and makes the strip less washed out, below 1 lifts them. 1.0 is as captured |
 
-HyperHDR output is not affected by these; HyperHDR does its own processing.
+HyperHDR output is not affected by these; HyperHDR does its own processing. Levels (above) apply to both outputs.
 
 ### DDP details
 
@@ -129,7 +140,7 @@ Packets follow WLED's receiver (`wled00/e131.cpp`): 10-byte header, version 1, d
 
 ### Status
 
-Native Capture Status shows the output, its target and state (`ready`, `sending`, `testing`, `send error`, `no LED layout`, `not configured`; UDP has no connection, so there is no "connected"), LED count, packets per frame, last send time, DDP frames, packets and errors, and the last output error. A failed send never stops capture: it is counted and retried after 1 second. **Peak sample** is the largest raw value the capture API returned; above 255 means the TV returns more than 8 bits per channel, which both outputs currently clip at 255.
+Native Capture Status shows the output, its target and state (`ready`, `sending`, `testing`, `send error`, `no LED layout`, `not configured`; UDP has no connection, so there is no "connected"), LED count, packets per frame, last send time, DDP frames, packets and errors, and the last output error. Below it, the **LED preview** ring shows the last strip sent to WLED laid out round the screen (top-left clockwise, whatever the strip's start corner and direction), refreshed once a second, so the mapping can be checked without looking behind the TV. A failed send never stops capture: it is counted and retried after 1 second. **Peak sample** is the largest raw value the capture API returned; above 255 means the TV returns more than 8 bits per channel, which both outputs currently clip at 255.
 
 ## Calibration screen
 
@@ -142,14 +153,15 @@ Native Capture Status shows the output, its target and state (`ready`, `sending`
 | Hue Gradient | Red, yellow, green, cyan, blue, magenta, red from left to right (top and bottom edges) |
 | Four Edges | Top red, right green, bottom blue, left yellow |
 | Four Corners | Top-left red, top-right green, bottom-right blue, bottom-left yellow |
-| Moving Edge Marker | A white block going clockwise round the edge, 2.5 s per lap; shows orientation, latency and smoothing |
+| Moving Edge Marker | A white block going clockwise round the edge, 2.5 s per lap; shows orientation, latency and smoothing. It is long enough to always light at least one sample point, so it grows with fewer points |
+| Sample Points | A white spot at each point the TV samples (from the service's stats), moved in when black bars are detected: the LEDs follow only these spots |
 | Edge Rainbow | The rainbow clockwise from the top-left corner, in the same order as round the screen |
 
 Remote: **LEFT / RIGHT** previous / next pattern, **OK** pauses the marker (on other patterns it shows or hides the info box), **UP / DOWN** make the marker faster / slower (1.5 to 10 s per lap) and, on the other patterns with WLED Direct, shift the LEDs one step clockwise / counter-clockwise (see LED shift), **BACK** returns to the settings on the last pattern used.
 
 The info box sits in the middle of the screen, where nothing is sampled, and hides itself (after 2.5 s on the full-screen colours, 8 s otherwise); any key shows it again. To protect OLED panels, the screen closes after 10 minutes without a key press on any still pattern; only the moving marker keeps running.
 
-Edge bands are 12.5% of the screen deep and corner blocks a third of it each way; the capture samples sit 5-7% in from the edges. Colours are exact CSS colours and gradients (no canvas, filters or opacity); the hue gradients have a stop at every 60 degrees, so they are exact hues throughout.
+Edge bands are 12.5% of the screen deep and corner blocks a third of it each way; the capture samples sit 5% in from the edges (with Fast's single side point in the middle of the side, Four Corners leaves the sides dark). **Calibrate levels** (under Levels) uses the same screen on its own: Full White and Full Black with the measurement in between, and any key cancels it. Colours are exact CSS colours and gradients (no canvas, filters or opacity); the hue gradients have a stop at every 60 degrees, so they are exact hues throughout.
 
 ## Releasing a new version
 

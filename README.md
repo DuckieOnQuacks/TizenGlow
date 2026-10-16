@@ -2,10 +2,12 @@
 
 TizenGlow lights the LEDs behind a Samsung Tizen TV from what's on its screen. The TV itself captures the picture, so it works with apps, streaming services and HDMI inputs, with no camera and no PC needed.
 
-- **WLED Direct:** drives a [WLED](https://kno.wled.ge/) controller over DDP, with an LED layout (counts per side, start corner, direction, LED shift), brightness, black threshold and smoothing.
+- **WLED Direct:** drives a [WLED](https://kno.wled.ge/) controller over DDP, with an LED layout (counts per side, start corner, direction, LED shift), brightness, black threshold, saturation, gamma and smoothing that glides between frames.
+- **Capture modes and black bars:** Fast, Balanced and Detailed trade colour detail for frame rate (6 to 14 sample points; the TV's firmware sets the pace), and letterboxed films are detected so the top and bottom LEDs follow the picture, not the bars.
+- **Levels:** measures what the TV's capture returns for white and black and stretches every frame to match, for both outputs.
 - **HyperHDR:** sends the picture to a HyperHDR or Hyperion server instead, found over SSDP or entered by hand.
 - **Calibration screen:** full-screen test patterns shown by the TV (solid colours, edges, corners, a moving marker, a rainbow) to check colours, orientation and alignment through the whole capture path.
-- **Live status:** capture and send FPS, frame timing, the detected capture API and errors, on a settings page made for the remote.
+- **Live status:** capture and send FPS, frame timing, the detected capture API and errors, and a preview ring of the strip, on a settings page made for the remote.
 
 Needs a Samsung TV with Tizen 6.5 or newer (2022+) and [TizenBrew](https://github.com/reisxd/TizenBrew).
 

@@ -133,6 +133,14 @@ namespace TizenGlow.WebSocket
                 // running loop doesn't write storage every frame.
                 result = JsonConvert.SerializeObject(new ReadConfigResultEvent(false, readConfigEvent.key, App.client.ReadStats()));
             }
+            else if (readConfigEvent.key == "ledPreview")
+            {
+                // The last strip sent to WLED, in canonical order (top-left clockwise), for the page's preview ring.
+                object preview = App.client.Wled.Preview();
+                result = JsonConvert.SerializeObject(preview != null
+                    ? new ReadConfigResultEvent(false, readConfigEvent.key, preview)
+                    : new ReadConfigResultEvent(true, readConfigEvent.key, "No LED frame yet."));
+            }
             else if (!Preference.Contains(readConfigEvent.key))
             {
                 result = JsonConvert.SerializeObject(new ReadConfigResultEvent(true, readConfigEvent.key, "Key doesn't exist."));
@@ -187,11 +195,13 @@ namespace TizenGlow.WebSocket
                     }
                 case "captureMode":
                     {
-                        // fast / balanced / smooth, picked up by the running loop on its next frame. The
-                        // mode also sets the target FPS; save that too so both survive a restart.
+                        // fast / balanced / detailed, picked up by the running loop on its next frame. The
+                        // mode also sets the target FPS; save that too so both survive a restart. Saved
+                        // under the mode's own name ("smooth" is still accepted for Detailed).
                         if (!HyperionClient.TrySetMode(setConfigEvent.value)) return;
                         Preference.Set("targetFps", HyperionClient.TargetFps.ToString());
-                        break;
+                        Preference.Set("captureMode", HyperionClient.Mode.Name);
+                        return;
                     }
                 // WLED Direct. Every value is validated by the output; anything invalid is ignored and not saved.
                 case "outputMode":
@@ -229,9 +239,44 @@ namespace TizenGlow.WebSocket
                         if (!App.client.Wled.TrySetSmoothing(setConfigEvent.value)) return; // "on" / "off"
                         break;
                     }
+                case "wledGamma":
+                    {
+                        if (!App.client.Wled.TrySetGamma(setConfigEvent.value)) return; // 0.5-3.0
+                        break;
+                    }
+                case "wledSaturation":
+                    {
+                        if (!App.client.Wled.TrySetSaturation(setConfigEvent.value)) return; // 0-200 (%)
+                        break;
+                    }
                 case "wledTest":
                     {
                         App.client.Wled.TryTest(setConfigEvent.value); // red/green/blue/white/off: a command, never saved
+                        return;
+                    }
+                case "letterbox":
+                    {
+                        if (!Letterbox.TrySetMode(setConfigEvent.value)) return; // off / auto / on
+                        break;
+                    }
+                case "levels":
+                    {
+                        if (!Levels.TrySetEnabled(setConfigEvent.value)) return; // on / off
+                        break;
+                    }
+                case "levelsWhite":
+                    {
+                        if (!Levels.TrySetWhite(setConfigEvent.value)) return; // "r,g,b" raw, normally measured
+                        break;
+                    }
+                case "levelsBlack":
+                    {
+                        if (!Levels.TrySetBlack(setConfigEvent.value)) return;
+                        break;
+                    }
+                case "measureLevels":
+                    {
+                        Levels.BeginMeasure(setConfigEvent.value); // white / black: a command, the result is saved by the service
                         return;
                     }
             }

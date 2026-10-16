@@ -364,6 +364,18 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
     overflow-wrap: anywhere;
 }
 
+#ledPreview {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: 14px;
+    border-radius: 10px;
+}
+
+.hint.warn {
+    color: var(--warn);
+}
+
 .details {
     display: flex;
     flex-direction: column;
