@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
-namespace HyperTizen
+namespace TizenGlow
 {
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int MeasureConditionFn(out Condition condition);

@@ -18,7 +18,7 @@
     <Folder Include="res\" />
   </ItemGroup>
 
-  <!-- The service reports its version to HyperTizenUI. Take it from tizen-manifest.xml (the TPK's own
+  <!-- The service reports its version to TizenGlowUI. Take it from tizen-manifest.xml (the TPK's own
        version) so there is one place to bump; it ends up as the assembly's informational version. -->
   <Target Name="VersionFromManifest" BeforeTargets="GetAssemblyVersion;GetAssemblyAttributes">
     <XmlPeek XmlInputPath="tizen-manifest.xml" Query="/p:manifest/@version" Namespaces="&lt;Namespace Prefix='p' Uri='http://tizen.org/ns/packages' /&gt;">

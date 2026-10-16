@@ -1,15 +1,15 @@
 {
-  "name": "@foxreis/hypertizen",
-  "appName": "HyperTizen",
-  "version": "1.0.9",
-  "description": "HyperTizen is a Hyperion / HyperHDR capturer for Tizen TVs.",
+  "name": "@duckieonquacks/tizenglow",
+  "appName": "TizenGlow",
+  "version": "1.0.0",
+  "description": "TizenGlow lights WLED or HyperHDR LEDs from what's on a Samsung Tizen TV's screen.",
   "packageType": "app",
-  "appPath": "HyperTizenUI/index.html",
-  "author": "Reis Can",
-  "serviceFile": "HyperTizenUI/js/service.js",
+  "appPath": "TizenGlowUI/index.html",
+  "author": "Joey Paschke",
+  "serviceFile": "TizenGlowUI/js/service.js",
   "keys": [],
   "repository": {
-    "url": "https://github.com/reisxd/HyperTizen"
+    "url": "https://github.com/DuckieOnQuacks/TizenGlow"
   },
   "license": "GPL-3.0-only"
 }

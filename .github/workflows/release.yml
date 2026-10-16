@@ -2,8 +2,8 @@ name: Release
 
 # Builds the TV service (TPK) and publishes it next to the matching settings page.
 #
-# To release: set the same version in HyperTizen/tizen-manifest.xml, package.json and
-# HyperTizenUI/js/wsClient.js (uiVersion), commit, then push a tag "v<version>", e.g. v1.0.6.
+# To release: set the same version in TizenGlow/tizen-manifest.xml, package.json and
+# TizenGlowUI/js/wsClient.js (uiVersion), commit, then push a tag "v<version>", e.g. v1.0.1.
 # A GitHub Release is created with the TPK and its SHA-256 attached.
 #
 # Run it by hand (Actions > Release > Run workflow) to only build; the TPK is then a
@@ -29,10 +29,10 @@ jobs:
 
       - name: Check the versions agree
         run: |
-          manifest=$(grep -o 'package="io.gh.reisxd.HyperTizen" version="[^"]*"' HyperTizen/tizen-manifest.xml | sed 's/.*version="//; s/"$//')
+          manifest=$(grep -o 'package="io.gh.duckieonquacks.TizenGlow" version="[^"]*"' TizenGlow/tizen-manifest.xml | sed 's/.*version="//; s/"$//')
           package=$(jq -r .version package.json)
-          page=$(grep -o "const uiVersion = '[^']*'" HyperTizenUI/js/wsClient.js | cut -d"'" -f2)
-          min=$(grep -o "const minService = '[^']*'" HyperTizenUI/js/wsClient.js | cut -d"'" -f2)
+          page=$(grep -o "const uiVersion = '[^']*'" TizenGlowUI/js/wsClient.js | cut -d"'" -f2)
+          min=$(grep -o "const minService = '[^']*'" TizenGlowUI/js/wsClient.js | cut -d"'" -f2)
           echo "tizen-manifest.xml=$manifest package.json=$package wsClient.js=$page"
           if [ -z "$manifest" ] || [ "$manifest" != "$package" ] || [ "$manifest" != "$page" ]; then
             echo "::error::versions differ: tizen-manifest.xml '$manifest', package.json '$package', wsClient.js uiVersion '$page'"
@@ -50,20 +50,20 @@ jobs:
           echo "MIN_SERVICE=$min" >> "$GITHUB_ENV"
 
       - name: Build TPK
-        run: dotnet build HyperTizen/HyperTizen.csproj -c Release
+        run: dotnet build TizenGlow/TizenGlow.csproj -c Release
 
       - name: Checksum
         run: |
-          tpk="io.gh.reisxd.HyperTizen-$VERSION.tpk"
-          cp "HyperTizen/bin/Release/tizen90/$tpk" .
+          tpk="io.gh.duckieonquacks.TizenGlow-$VERSION.tpk"
+          cp "TizenGlow/bin/Release/tizen90/$tpk" .
           sha256sum "$tpk" | tee "$tpk.sha256"
           echo "SHA256=$(cut -d' ' -f1 "$tpk.sha256")" >> "$GITHUB_ENV"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: io.gh.reisxd.HyperTizen-${{ env.VERSION }}
-          path: io.gh.reisxd.HyperTizen-${{ env.VERSION }}.tpk*
+          name: io.gh.duckieonquacks.TizenGlow-${{ env.VERSION }}
+          path: io.gh.duckieonquacks.TizenGlow-${{ env.VERSION }}.tpk*
 
       - name: Publish release
         if: github.ref_type == 'tag'
@@ -71,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           module=$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')
-          tpk="io.gh.reisxd.HyperTizen-$VERSION.tpk"
+          tpk="io.gh.duckieonquacks.TizenGlow-$VERSION.tpk"
           if [ "$MIN_SERVICE" = "$VERSION" ]; then
             install="Install both. The page's top bar shows \`v$VERSION\` when the service and the page match, and says which one to update when they don't."
           else
@@ -85,4 +85,4 @@ jobs:
 
           $install
           EOF
-          gh release create "$GITHUB_REF_NAME" "$tpk" "$tpk.sha256" --title "HyperTizen $VERSION" --notes-file notes.md
+          gh release create "$GITHUB_REF_NAME" "$tpk" "$tpk.sha256" --title "TizenGlow $VERSION" --notes-file notes.md

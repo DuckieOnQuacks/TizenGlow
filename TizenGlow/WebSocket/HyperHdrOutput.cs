@@ -1,4 +1,4 @@
-using HyperTizen.WebSocket.DataTypes;
+using TizenGlow.WebSocket.DataTypes;
 using Newtonsoft.Json;
 using System;
 using System.Net.WebSockets;
@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace HyperTizen.WebSocket
+namespace TizenGlow.WebSocket
 {
     /// <summary>
     /// The original output: each frame as a small PNG in a HyperHDR / Hyperion JSON "image" command

@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest package="io.gh.duckieonquacks.TizenGlow" version="1.0.0" api-version="6.5" xmlns="http://tizen.org/ns/packages">
+    <author>Joey Paschke</author>
+    <profile name="tv" />
+    <service-application appid="io.gh.duckieonquacks.TizenGlow" exec="TizenGlow.dll" multiple="false" nodisplay="true" taskmanage="false" api-version="9" type="dotnet">
+        <label>TizenGlow Service</label>
+        <icon>TizenGlow.png</icon>
+        <splash-screens />
+    </service-application>
+    <shortcut-list />
+    <privileges>
+        <privilege>http://tizen.org/privilege/notification</privilege>
+        <privilege>http://tizen.org/privilege/internet</privilege>
+    </privileges>
+    <dependencies />
+    <provides-appdefined-privileges />
+</manifest>

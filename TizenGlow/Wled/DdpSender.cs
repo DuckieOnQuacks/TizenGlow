@@ -2,7 +2,7 @@ using System;
 using System.Net;
 using System.Net.Sockets;
 
-namespace HyperTizen.Wled
+namespace TizenGlow.Wled
 {
     /// <summary>
     /// DDP (Distributed Display Protocol) RGB sender, matching what WLED receives on UDP 4048

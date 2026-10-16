@@ -1,4 +1,4 @@
-namespace HyperTizen
+namespace TizenGlow
 {
     /// <summary>
     /// User-facing capture presets. Each sets only parameters the capture loop really has; sampling

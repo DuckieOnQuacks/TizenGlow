@@ -1,10 +1,10 @@
 ﻿using Tizen.Applications;
 using Tizen.Applications.Notifications;
 using Tizen.System;
-using HyperTizen.WebSocket;
+using TizenGlow.WebSocket;
 using System.Threading.Tasks;
 
-namespace HyperTizen
+namespace TizenGlow
 {
     class App : ServiceApplication
     {

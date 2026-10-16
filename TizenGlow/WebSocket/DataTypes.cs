@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace HyperTizen.WebSocket.DataTypes
+namespace TizenGlow.WebSocket.DataTypes
 {
     public enum Event
     {
@@ -72,9 +72,9 @@ namespace HyperTizen.WebSocket.DataTypes
 
         public string command { get; set; } = "image";
         public string imagedata { get; set; }
-        public string name { get; set; } = "HyperTizen Data";
+        public string name { get; set; } = "TizenGlow Data";
         public string format { get; set; } = "auto";
         public byte priority { get; set; } = 99;
-        public string origin { get; set; } = "HyperTizen";
+        public string origin { get; set; } = "TizenGlow";
     }
 }

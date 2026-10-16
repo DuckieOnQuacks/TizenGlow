@@ -83,6 +83,6 @@ test_file_patterns:
 - _test*
 #  List of projects in the workspace and their dependencies
 projects:
-  HyperTizen: []
+  TizenGlow: []
 #  Skip generating files needed for VS
 skip_vs_files: false

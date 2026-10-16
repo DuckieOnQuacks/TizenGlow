@@ -1,6 +1,6 @@
 using System.Threading.Tasks;
 
-namespace HyperTizen
+namespace TizenGlow
 {
     /// <summary>
     /// Where captured frames go: HyperHDR (JSON image command over WebSocket) or WLED Direct (DDP).

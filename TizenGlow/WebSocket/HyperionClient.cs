@@ -1,12 +1,12 @@
 using System.Threading.Tasks;
 using Tizen.Applications;
-using HyperTizen.Wled;
+using TizenGlow.Wled;
 using System;
 using System.Globalization;
 using System.Reflection;
 using System.Threading;
 
-namespace HyperTizen.WebSocket
+namespace TizenGlow.WebSocket
 {
     /// <summary>
     /// Owns the single capture loop. Each frame is captured once and handed to the active output:
@@ -16,14 +16,14 @@ namespace HyperTizen.WebSocket
     {
         private int _loopRunning;
 
-        // The presets HyperTizenUI offers; anything else sent as "targetFps" is ignored.
+        // The presets TizenGlowUI offers; anything else sent as "targetFps" is ignored.
         public static readonly int[] FpsPresets = { 10, 15, 20, 25, 30, 40 };
         private static volatile CaptureMode _mode = CaptureMode.Balanced;
         private static volatile int _targetFps = CaptureMode.Balanced.TargetFps;
 
         /// <summary>
         /// This service's version (tizen-manifest.xml, stamped in at build time), without build metadata.
-        /// HyperTizenUI compares it with its own so a half-done update is obvious.
+        /// TizenGlowUI compares it with its own so a half-done update is obvious.
         /// </summary>
         public static readonly string ServiceVersion = ReadServiceVersion();
 

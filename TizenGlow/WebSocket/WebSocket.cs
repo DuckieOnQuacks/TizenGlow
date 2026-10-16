@@ -6,12 +6,12 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
-using HyperTizen.WebSocket.DataTypes;
+using TizenGlow.WebSocket.DataTypes;
 using Rssdp;
 using Tizen.Applications;
-using static HyperTizen.WebSocket.DataTypes.SSDPScanResultEvent;
+using static TizenGlow.WebSocket.DataTypes.SSDPScanResultEvent;
 
-namespace HyperTizen.WebSocket
+namespace TizenGlow.WebSocket
 {
     public class WSServer
     {

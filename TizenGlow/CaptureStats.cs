@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-namespace HyperTizen
+namespace TizenGlow
 {
     /// <summary>
     /// Live capture performance: a rolling window of completed frames plus counters since the last reset.

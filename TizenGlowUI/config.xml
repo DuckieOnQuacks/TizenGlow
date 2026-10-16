@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://yourdomain/Template01" version="0.2.1" viewmodes="maximized">
-	<tizen:application id="6jwjAZfoVq.HyperTizenUI" package="6jwjAZfoVq" required_version="6.0"/>
-	<name>HyperTizen</name>
+	<tizen:application id="Sj1Em5JlZW.TizenGlowUI" package="Sj1Em5JlZW" required_version="6.0"/>
+	<name>TizenGlow</name>
 	<icon src="icon.png"/>
 	<tizen:privilege name="http://tizen.org/privilege/application.launch"/>
 	<tizen:privilege name="http://tizen.org/privilege/internet" />

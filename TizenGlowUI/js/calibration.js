@@ -1,5 +1,5 @@
 // Calibration screen: full-screen test patterns shown by the TV itself. The running capture sees them like
-// any other picture, so they test the whole path: screen -> Samsung capture -> HyperTizen -> WLED Direct /
+// any other picture, so they test the whole path: screen -> Samsung capture -> TizenGlow -> WLED Direct /
 // HyperHDR -> LEDs. Nothing is sent from here except the LED shift (UP / DOWN on still patterns); Test WLED
 // stays the network-only test.
 //

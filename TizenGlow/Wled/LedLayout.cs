@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace HyperTizen.Wled
+namespace TizenGlow.Wled
 {
     public enum StartCorner { TopLeft, TopRight, BottomRight, BottomLeft }
 

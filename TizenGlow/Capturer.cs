@@ -7,7 +7,7 @@ using Tizen.Applications;
 using Tizen.Applications.Notifications;
 using Tizen.System;
 
-namespace HyperTizen
+namespace TizenGlow
 {
     public static class Capturer
     {
@@ -147,7 +147,7 @@ namespace HyperTizen
         {
             Report("lastCaptureError", Diagnostic(state == "unsupported" ? "probe" : "GetCondition failed", detail));
             SetState(state);
-            Notify("Capture " + (state == "unsupported" ? "unavailable" : "failed") + ": " + reason + ". Details in HyperTizenUI.");
+            Notify("Capture " + (state == "unsupported" ? "unavailable" : "failed") + ": " + reason + ". Details in TizenGlowUI.");
         }
 
         private static string Diagnostic(string what, string detail)
@@ -172,7 +172,7 @@ namespace HyperTizen
             {
                 if (!_notified.Add(content)) return; // once per service run; condition retries would repeat it
             }
-            try { NotificationManager.Post(new Notification { Title = "HyperTizen", Content = content, Count = 1 }); }
+            try { NotificationManager.Post(new Notification { Title = "TizenGlow", Content = content, Count = 1 }); }
             catch { } // details are already persisted in lastCaptureError
         }
 

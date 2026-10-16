@@ -1,8 +1,8 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.0.9';
+const uiVersion = '1.0.0';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
-const minService = '1.0.9'; // LED shift
+const minService = '1.0.0';
 
 let client;
 let deviceIP;
@@ -172,7 +172,7 @@ function checkWledTarget(host, port) {
 
 window.saveWledTarget = () => {
     const result = checkWledTarget(document.getElementById('wledHost').value, document.getElementById('wledPort').value);
-    if (!result.error && !connected()) result.error = 'Not connected to the HyperTizen service yet, try again in a moment';
+    if (!result.error && !connected()) result.error = 'Not connected to the TizenGlow service yet, try again in a moment';
     if (result.error) return showStatus('wledStatus', result.error, true);
     send({ event: events.SetConfig, key: 'wledTarget', value: `${result.host}:${result.port}` });
     wledReady = true;
@@ -253,7 +253,7 @@ function showVersions(native) {
 
 window.saveLedLayout = () => {
     const result = readLedCounts();
-    if (!result.error && !connected()) result.error = 'Not connected to the HyperTizen service yet, try again in a moment';
+    if (!result.error && !connected()) result.error = 'Not connected to the TizenGlow service yet, try again in a moment';
     if (result.error) return showStatus('layoutStatus', result.error, true);
     const c = result.counts;
     send({ event: events.SetConfig, key: 'ledLayout', value: `${c.join(',')},${cornerSel.value},${directionSel.value}` });
@@ -297,7 +297,7 @@ const testLabels = { red: 'Red', green: 'Green', blue: 'Blue', white: 'White', o
 
 // Whole-strip DDP test pattern; works with capture off.
 window.testWled = color => {
-    if (!connected()) return showStatus('testStatus', 'Not connected to the HyperTizen service yet', true);
+    if (!connected()) return showStatus('testStatus', 'Not connected to the TizenGlow service yet', true);
     if (!wledReady) return showStatus('testStatus', 'Save a WLED target first', true);
     send({ event: events.SetConfig, key: 'wledTest', value: color });
     showStatus('testStatus', `${testLabels[color]} sent to WLED for 10 s`);
@@ -319,7 +319,7 @@ function setText(id, text) {
 
 function showCaptureStatus(msg) {
     setText(msg.key, !msg.error ? String(msg.value)
-        : msg.key === 'captureState' ? 'not reported (is native HyperTizen 1.0.1+ installed?)' : '-');
+        : msg.key === 'captureState' ? 'not reported (is the TizenGlow service installed?)' : '-');
     // The stylesheet colours the state badge from this (running green, error red, ...).
     if (msg.key === 'captureState') document.getElementById('captureState').dataset.state = msg.error ? '' : String(msg.value);
 }
@@ -455,7 +455,7 @@ window.useManualServer = () => {
     const status = document.getElementById('manualStatus');
     const result = buildRPC(document.getElementById('manualHost').value, document.getElementById('manualPort').value);
     if (!result.error && (!client || client.readyState !== WebSocket.OPEN)) {
-        result.error = 'Not connected to the HyperTizen service yet, try again in a moment';
+        result.error = 'Not connected to the TizenGlow service yet, try again in a moment';
     }
     status.className = result.error ? 'error' : '';
     if (result.error) return status.innerText = result.error;
