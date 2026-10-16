@@ -1,8 +1,8 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.0.8';
+const uiVersion = '1.0.9';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
-const minService = '1.0.7';
+const minService = '1.0.9'; // LED shift
 
 let client;
 let deviceIP;
@@ -150,7 +150,7 @@ const directionSel = makeSelector('ledDirection', Object.keys(directionLabels), 
 window.stepLedStart = cornerSel.step;
 window.stepLedDirection = directionSel.step;
 
-const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing'];
+const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift'];
 const ledSides = ['ledTop', 'ledRight', 'ledBottom', 'ledLeft'];
 let wledReady = false;
 
@@ -260,6 +260,30 @@ window.saveLedLayout = () => {
     showStatus('layoutStatus', `LED layout saved: ${c[0] + c[1] + c[2] + c[3]} LEDs from ${cornerLabels[cornerSel.value]}, ${directionLabels[directionSel.value].toLowerCase()}`);
 }
 
+// LED shift: moves the colours round the strip one LED at a time (+ clockwise), for a strip whose first
+// LED isn't exactly at the corner. Sent at once; the calibration screen steps it with UP / DOWN.
+let ledShift = 0;
+
+function showLedShift(value) {
+    ledShift = Number.isInteger(value) ? value : 0;
+    const text = ledShift > 0 ? `+${ledShift} clockwise` : ledShift < 0 ? `${ledShift} counter-clockwise` : '0';
+    document.getElementById('ledShift').textContent = `LED shift: < ${text} >`;
+}
+
+// LEFT / RIGHT step one LED, OK steps clockwise and wraps; less than one whole loop of the strip either way.
+window.stepLedShift = (step, wrap) => {
+    if (!connected()) return;
+    let total = 0;
+    for (const id of ledSides) total += Math.max(0, parseInt(document.getElementById(id).value, 10) || 0);
+    const limit = Math.max(1, total - 1);
+    let next = ledShift + step;
+    if (next > limit) next = wrap ? -limit : limit;
+    if (next < -limit) next = wrap ? limit : -limit;
+    if (next === ledShift) return;
+    showLedShift(next);
+    send({ event: events.SetConfig, key: 'ledShift', value: String(next) });
+}
+
 function showLedLayout(value) {
     const parts = value.split(',');
     if (parts.length !== 6) return;
@@ -366,6 +390,8 @@ function onMessage(data) {
                 thresholdSel.show(msg.error ? 0 : Number(msg.value));
             } else if (msg.key === 'wledSmoothing') {
                 smoothingSel.show(msg.error ? 'on' : msg.value);
+            } else if (msg.key === 'ledShift') {
+                showLedShift(msg.error ? 0 : Number(msg.value));
             } else if (msg.key === 'captureStats') {
                 showCaptureStats(msg);
             } else if (captureStatusKeys.indexOf(msg.key) !== -1) {

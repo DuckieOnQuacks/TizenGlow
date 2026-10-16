@@ -109,6 +109,8 @@ WLED needs **Receive UDP realtime** on (Config > Sync Interfaces, on by default)
 
 ### LED mapping
 
+**LED shift** (native 1.0.9+, under LED Layout) moves the colours round the strip one LED at a time and applies at once: + clockwise, - counter-clockwise, whichever way the strip runs. Use it when the counts are right but the corners are a few LEDs off, usually because the strip's first LED isn't exactly at the start corner. Easiest on the calibration screen: Four Edges, then UP / DOWN until each colour ends at its corner. It is kept when the layout is saved again.
+
 The layout is one loop clockwise from the top-left corner: top left to right, right top to bottom, bottom right to left, left bottom to top. Each side's LEDs are coloured only from that side's capture points (4 top, 3 right, 4 bottom, 3 left), linearly interpolated by position; LEDs beyond the outermost point on a side take that point's colour. The strip is that loop entered at the start corner and walked in the chosen direction. Test Red and the other test colours fill the whole layout (2048 LEDs if no layout is saved yet; WLED ignores pixels past its strip).
 
 ### Picture settings (WLED Direct only)
@@ -143,7 +145,7 @@ Native Capture Status shows the output, its target and state (`ready`, `sending`
 | Moving Edge Marker | A white block going clockwise round the edge, 2.5 s per lap; shows orientation, latency and smoothing |
 | Edge Rainbow | The rainbow clockwise from the top-left corner, in the same order as round the screen |
 
-Remote: **LEFT / RIGHT** previous / next pattern, **OK** pauses the marker (on other patterns it shows or hides the info box), **UP / DOWN** make the marker faster / slower (1.5 to 10 s per lap), **BACK** returns to the settings on the last pattern used.
+Remote: **LEFT / RIGHT** previous / next pattern, **OK** pauses the marker (on other patterns it shows or hides the info box), **UP / DOWN** make the marker faster / slower (1.5 to 10 s per lap) and, on the other patterns with WLED Direct, shift the LEDs one step clockwise / counter-clockwise (see LED shift), **BACK** returns to the settings on the last pattern used.
 
 The info box sits in the middle of the screen, where nothing is sampled, and hides itself (after 2.5 s on the full-screen colours, 8 s otherwise); any key shows it again. To protect OLED panels, the screen closes after 10 minutes without a key press on any still pattern; only the moving marker keeps running.
 

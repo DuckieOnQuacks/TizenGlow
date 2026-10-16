@@ -38,6 +38,7 @@ namespace HyperTizen.Wled
         private IPEndPoint _endpoint;
         private bool _resolving;
         private LedLayout _layout;
+        private int _shift;
         private int _brightness = 100;
         private int _blackThreshold;
         private bool _smoothing = true;
@@ -220,7 +221,21 @@ namespace HyperTizen.Wled
         {
             LedLayout layout;
             if (!LedLayout.TryParse(value, Capturer.CapturePoints, out layout)) return false;
-            lock (_lock) _layout = layout;
+            lock (_lock) _layout = _shift == 0 ? layout : layout.WithShift(_shift);
+            return true;
+        }
+
+        /// <summary>LED shift, e.g. "3" or "-2": LEDs to move the picture clockwise round the strip. Kept across layout changes.</summary>
+        public bool TrySetShift(string value)
+        {
+            int shift;
+            if (!int.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out shift)
+                || shift < -LedLayout.MaxShift || shift > LedLayout.MaxShift) return false;
+            lock (_lock)
+            {
+                _shift = shift;
+                if (_layout != null) _layout = _layout.WithShift(shift);
+            }
             return true;
         }
 

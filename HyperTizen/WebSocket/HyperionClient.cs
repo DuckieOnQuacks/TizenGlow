@@ -78,6 +78,7 @@ namespace HyperTizen.WebSocket
             HyperHdr = new HyperHdrOutput(Preference.Contains("rpcServer") ? Preference.Get<string>("rpcServer") : null);
             Wled = new WledOutput(() => _mode.SmoothingMs);
             if (Preference.Contains("wledTarget")) Wled.TrySetTarget(Preference.Get<string>("wledTarget"));
+            if (Preference.Contains("ledShift")) Wled.TrySetShift(Preference.Get<string>("ledShift"));
             if (Preference.Contains("ledLayout")) Wled.TrySetLayout(Preference.Get<string>("ledLayout"));
             if (Preference.Contains("wledBrightness")) Wled.TrySetBrightness(Preference.Get<string>("wledBrightness"));
             if (Preference.Contains("wledBlackThreshold")) Wled.TrySetBlackThreshold(Preference.Get<string>("wledBlackThreshold"));

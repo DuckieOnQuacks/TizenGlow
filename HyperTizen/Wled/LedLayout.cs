@@ -15,12 +15,16 @@ namespace HyperTizen.Wled
     ///   left   bottom to top
     /// Each edge's LEDs are coloured only from that edge's samples, interpolated by position along the
     /// edge (LEDs outside the first/last sample take that sample's colour). The physical strip is that
-    /// loop entered at Start and walked clockwise or counter-clockwise. All of it is precomputed into
-    /// one (sample a, sample b, weight) triple per physical LED, so mapping a frame is a single pass.
+    /// loop entered at Start and walked clockwise or counter-clockwise. Shift then moves the picture
+    /// round the loop: each LED shows the LED Shift places counter-clockwise of it, so a positive shift
+    /// moves the colours clockwise whichever way the strip runs (for a strip whose first LED isn't
+    /// exactly at the corner). All of it is precomputed into one (sample a, sample b, weight) triple per
+    /// physical LED, so mapping a frame is a single pass.
     /// </summary>
     public sealed class LedLayout
     {
         public const int MaxPerSide = 2000;
+        public const int MaxShift = 4 * MaxPerSide;
 
         /// <summary>Capture points per frame (Capturer's table): 4 top, 3 right, 4 bottom, 3 left.</summary>
         public const int SampleCount = 14;
@@ -39,19 +43,21 @@ namespace HyperTizen.Wled
         public readonly int Top, Right, Bottom, Left;
         public readonly StartCorner Start;
         public readonly bool Clockwise;
+        public readonly int Shift;
         public int Count { get { return Top + Right + Bottom + Left; } }
 
         private readonly int[] _canonical; // physical LED -> canonical LED
         private readonly int[] _a, _b;     // physical LED -> sample indices
         private readonly float[] _w;       // physical LED -> weight of sample b
+        private readonly CapturePoint[] _points;
 
-        public LedLayout(int top, int right, int bottom, int left, StartCorner start, bool clockwise, CapturePoint[] points)
+        public LedLayout(int top, int right, int bottom, int left, StartCorner start, bool clockwise, CapturePoint[] points, int shift = 0)
         {
             foreach (int n in new[] { top, right, bottom, left })
                 if (n < 0 || n > MaxPerSide) throw new ArgumentOutOfRangeException(nameof(top), "each side must be 0-" + MaxPerSide);
             if (top + right + bottom + left == 0) throw new ArgumentException("the layout needs at least one LED");
 
-            Top = top; Right = right; Bottom = bottom; Left = left; Start = start; Clockwise = clockwise;
+            Top = top; Right = right; Bottom = bottom; Left = left; Start = start; Clockwise = clockwise; Shift = shift; _points = points;
             int count = Count;
             int[] perEdge = { top, right, bottom, left };
 
@@ -79,6 +85,7 @@ namespace HyperTizen.Wled
             {
                 // Counter-clockwise from a corner starts with the LED just before it in canonical order.
                 int c = clockwise ? (first + p) % count : ((first - 1 - p) % count + count) % count;
+                c = ((c - shift) % count + count) % count;
                 _canonical[p] = c;
                 _a[p] = ca[c];
                 _b[p] = cb[c];
@@ -114,6 +121,12 @@ namespace HyperTizen.Wled
             }
             a = b = samples[last];
             w = 0;
+        }
+
+        /// <summary>The same layout with another shift.</summary>
+        public LedLayout WithShift(int shift)
+        {
+            return new LedLayout(Top, Right, Bottom, Left, Start, Clockwise, _points, shift);
         }
 
         /// <summary>The canonical LED shown by physical LED p (for tests and diagnostics).</summary>

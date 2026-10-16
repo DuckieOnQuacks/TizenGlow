@@ -209,6 +209,11 @@ namespace HyperTizen.WebSocket
                         if (!App.client.Wled.TrySetLayout(setConfigEvent.value)) return; // see LedLayout.Serialize
                         break;
                     }
+                case "ledShift":
+                    {
+                        if (!App.client.Wled.TrySetShift(setConfigEvent.value)) return; // LEDs clockwise, negative = counter-clockwise
+                        break;
+                    }
                 case "wledBrightness":
                     {
                         if (!App.client.Wled.TrySetBrightness(setConfigEvent.value)) return; // 0-100 (%)
