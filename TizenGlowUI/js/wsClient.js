@@ -1,5 +1,5 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.0.0';
+const uiVersion = '1.0.1';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
 const minService = '1.0.0';
@@ -399,19 +399,23 @@ function onMessage(data) {
             }
             break;
         case events.SSDPScanResult: {
-            for (const device of msg.devices) {
-                const url = device.UrlBase.indexOf('https') === 0 ? device.UrlBase.replace('https', 'wss') : device.UrlBase.replace('http', 'ws');
+            for (const device of msg.devices || []) {
+                // Any device on the network can answer the search, so its name and address are untrusted:
+                // the address must be a plain ws(s)://host[:port][/], and both go in as text, never as HTML.
+                const base = String(device.UrlBase || '');
+                const url = /^https:/i.test(base) ? 'wss' + base.slice(5) : /^http:/i.test(base) ? 'ws' + base.slice(4) : '';
+                if (!/^wss?:\/\/([a-z0-9.-]+|\[[0-9a-f:.]+\])(:\d{1,5})?\/?$/i.test(url) || ssdpDevices.some(d => d.url === url)) continue;
 
-                if (ssdpDevices.some(d => d.url === url)) {
-                    continue;
-                }
-                
-                const friendlyName = device.FriendlyName;
-                document.getElementById('ssdpItems').innerHTML += `
-                <div class="ssdpItem" data-uri="${url}" data-friendlyName="${friendlyName}" tabindex="0" onclick="setRPC('${url}')">
-                    <a>${friendlyName}</a>
-                </div>
-                `;
+                const friendlyName = String(device.FriendlyName || url).slice(0, 60);
+                const item = document.createElement('div');
+                item.className = 'ssdpItem';
+                item.tabIndex = 0;
+                item.setAttribute('data-uri', url);
+                item.onclick = () => setRPC(url);
+                const label = document.createElement('a');
+                label.textContent = friendlyName;
+                item.appendChild(label);
+                document.getElementById('ssdpItems').appendChild(item);
                 ssdpDevices.push({ url, friendlyName });
             }
         }
