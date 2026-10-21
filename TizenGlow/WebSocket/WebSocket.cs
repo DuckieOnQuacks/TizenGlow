@@ -239,6 +239,11 @@ namespace TizenGlow.WebSocket
                         if (!App.client.Wled.TrySetSmoothing(setConfigEvent.value)) return; // "on" / "off"
                         break;
                     }
+                case "wledTvOff":
+                    {
+                        if (!App.client.Wled.TrySetTvOff(setConfigEvent.value)) return; // off / leave
+                        break;
+                    }
                 case "wledGamma":
                     {
                         if (!App.client.Wled.TrySetGamma(setConfigEvent.value)) return; // 0.5-3.0

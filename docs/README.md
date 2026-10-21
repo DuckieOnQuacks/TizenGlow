@@ -96,6 +96,8 @@ Letterboxed films (2.39:1 on a 16:9 screen) leave the top and bottom sample rows
 
 The **Target FPS** button under Capture Quality sets how fast the service captures: 10, 15, 20, 25, 30 or 40. Press [OK] to cycle through the values, or [LEFT] / [RIGHT] to step down / up. The change applies to the next frame and is remembered.
 
+While capture runs, the service reads the TV's capture settings again every 5 seconds, and after 2 failed frames in a row, because the TV can change them without warning (a game console, Game Mode, 120 Hz): frames taken with stale settings fail or sample the wrong spots. When they changed, capture carries on with the new ones at once; if the capture API stops answering, it is probed again. Only a change is written (the Points row and `tools/watch-status.js` show it).
+
 Capture, image and send time count toward each frame, so the service only waits for whatever is left of the frame interval. If Capture FPS stays below the target, the TV's capture API is the limit (see Capture above); pick a mode with fewer points.
 
 ### Levels
@@ -121,6 +123,8 @@ TV capture -> 14 edge samples -> LED layout + interpolation -> DDP over UDP -> W
 5. Turn on **Capture enabled**.
 
 WLED needs **Receive UDP realtime** on (Config > Sync Interfaces, on by default). If TizenGlow stops sending, WLED returns to its own effect after its realtime timeout (2.5 s by default).
+
+**When the TV turns off** (under WLED Direct): **Switch the strip off** (default) switches WLED off through its JSON API when the TV turns off while TizenGlow is driving the strip, instead of letting WLED fall back to its own effect. When the TV comes back on, capture lights the strip again, and the first frame also switches WLED back on, so it behaves as before once capture stops. **Leave it to WLED** keeps the old behaviour. With capture off, TizenGlow never touches WLED's power. Output state shows `switched off with the TV` while it is off; a failure shows under Output error.
 
 ### LED mapping
 

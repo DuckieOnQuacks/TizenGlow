@@ -1,8 +1,8 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.2.1';
+const uiVersion = '1.3.0';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
-const minService = '1.2.0'; // start with the TV
+const minService = '1.3.0'; // strip off with the TV
 
 let client;
 let deviceIP;
@@ -141,6 +141,9 @@ function showOutputMode(mode) { outputSel.show(mode); }
 const brightnessSel = makeSelector('wledBrightness', [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], 100, v => `Brightness: &lt; ${v}% &gt;`, 'wledBrightness');
 const thresholdSel = makeSelector('wledBlackThreshold', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0, v => `Black threshold: &lt; ${v}% &gt;`, 'wledBlackThreshold');
 const smoothingSel = makeSelector('wledSmoothing', ['on', 'off'], 'on', v => `Smoothing: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'wledSmoothing');
+const tvOffLabels = { off: 'Switch the strip off', leave: "Leave it to WLED" };
+const tvOffSel = makeSelector('wledTvOff', Object.keys(tvOffLabels), 'off', v => `When the TV turns off: &lt; ${tvOffLabels[v]} &gt;`, 'wledTvOff');
+window.stepTvOff = tvOffSel.step;
 const saturationSel = makeSelector('wledSaturation', [0, 25, 50, 75, 100, 125, 150, 175, 200], 100, v => `Saturation: &lt; ${v}% &gt;`, 'wledSaturation');
 const gammaValues = ['0.6', '0.7', '0.8', '0.9', '1.0', '1.2', '1.4', '1.6', '1.8', '2.0', '2.2', '2.4'];
 const gammaSel = makeSelector('wledGamma', gammaValues, '1.0', v => `Gamma: &lt; ${v} &gt;`, 'wledGamma');
@@ -188,7 +191,7 @@ const directionSel = makeSelector('ledDirection', Object.keys(directionLabels), 
 window.stepLedStart = cornerSel.step;
 window.stepLedDirection = directionSel.step;
 
-const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift', 'wledSaturation', 'wledGamma'];
+const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift', 'wledSaturation', 'wledGamma', 'wledTvOff'];
 const ledSides = ['ledTop', 'ledRight', 'ledBottom', 'ledLeft'];
 let wledReady = false;
 
@@ -487,6 +490,8 @@ function onMessage(data) {
                 smoothingSel.show(msg.error ? 'on' : msg.value);
             } else if (msg.key === 'ledShift') {
                 showLedShift(msg.error ? 0 : Number(msg.value));
+            } else if (msg.key === 'wledTvOff') {
+                tvOffSel.show(msg.error ? 'off' : msg.value);
             } else if (msg.key === 'wledSaturation') {
                 saturationSel.show(msg.error ? 100 : Number(msg.value));
             } else if (msg.key === 'wledGamma') {

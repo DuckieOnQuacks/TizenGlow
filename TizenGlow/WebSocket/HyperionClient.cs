@@ -38,6 +38,12 @@ namespace TizenGlow.WebSocket
         /// <summary>Live performance numbers; reset when capture starts and when the mode, target FPS or output changes.</summary>
         public static readonly CaptureStats Stats = new CaptureStats();
 
+        /// <summary>Failed frames in a row before the capture settings are read again.</summary>
+        internal static int RecoverAfterFailures = 2;
+
+        /// <summary>How often a running loop checks whether the TV changed its capture settings.</summary>
+        internal static int ConditionCheckMs = 5000;
+
         /// <summary>Both are read by the loop every frame, so changes apply without a restart.</summary>
         public static CaptureMode Mode { get { return _mode; } }
         public static int TargetFps { get { return _targetFps; } }
@@ -85,6 +91,7 @@ namespace TizenGlow.WebSocket
             if (Preference.Contains("wledSmoothing")) Wled.TrySetSmoothing(Preference.Get<string>("wledSmoothing"));
             if (Preference.Contains("wledGamma")) Wled.TrySetGamma(Preference.Get<string>("wledGamma"));
             if (Preference.Contains("wledSaturation")) Wled.TrySetSaturation(Preference.Get<string>("wledSaturation"));
+            if (Preference.Contains("wledTvOff")) Wled.TrySetTvOff(Preference.Get<string>("wledTvOff"));
             if (Preference.Contains("letterbox")) Letterbox.TrySetMode(Preference.Get<string>("letterbox"));
             Autostart.TrySet(Preference.Contains("autostart") ? Preference.Get<string>("autostart") : "on"); // re-registered on every start
             if (Preference.Contains("levels")) Levels.TrySetEnabled(Preference.Get<string>("levels"));
@@ -161,21 +168,12 @@ namespace TizenGlow.WebSocket
             }
 
             Capturer.SetState("starting");
-            while (!Capturer.GetCondition())
-            {
-                // A missing API never appears at runtime. Otherwise the API exists but the condition
-                // read failed (already persisted and notified): retry slowly instead of spinning.
-                if (Capturer.Unsupported) return;
-                await Task.Delay(_mode.ConditionRetryMs);
-                if (!App.Configuration.Enabled)
-                {
-                    Capturer.SetState("stopped");
-                    return;
-                }
-            }
+            if (!await ReadConditionAsync()) return;
 
             Stats.Reset(); // fresh numbers for every capture session
             double nextFrameMs = Stats.Now();
+            double lastConditionCheck = nextFrameMs;
+            int failedInRow = 0;
             while (App.Configuration.Enabled)
             {
                 int epoch = Stats.Epoch;
@@ -201,9 +199,39 @@ namespace TizenGlow.WebSocket
                 {
                     Stats.AddFailed(epoch);
                     Capturer.ReportError("frame capture", e);
+                    if (++failedInRow >= RecoverAfterFailures)
+                    {
+                        // Frames keep failing: the TV may have changed its capture settings (a console, Game
+                        // Mode, 120 Hz). Read them again, re-probing if the current API no longer answers;
+                        // when they changed, try again at once.
+                        failedInRow = 0;
+                        bool changed;
+                        if (Capturer.RefreshCondition(out changed))
+                        {
+                            if (changed) { nextFrameMs = Stats.Now(); continue; }
+                        }
+                        else
+                        {
+                            // A failed re-probe leaves no usable API: wait until the settings can be read
+                            // again, as at start, rather than capture without them.
+                            if (!await ReadConditionAsync()) return;
+                            nextFrameMs = Stats.Now();
+                            continue;
+                        }
+                    }
                     await Task.Delay(mode.ErrorBackoffMs);
                     nextFrameMs = Stats.Now();
                     continue;
+                }
+                failedInRow = 0;
+
+                // The TV can also change its capture settings without any frame failing (resolution, points
+                // per round, wait): look every few seconds. Only a change is written anywhere.
+                if (captured - lastConditionCheck >= ConditionCheckMs)
+                {
+                    lastConditionCheck = captured;
+                    bool changed;
+                    Capturer.RefreshCondition(out changed);
                 }
 
                 // Only a frame that actually came back from the capture API counts as running.
@@ -241,17 +269,45 @@ namespace TizenGlow.WebSocket
             Capturer.SetState("stopped");
         }
 
+        /// <summary>
+        /// Reads the capture settings, retrying slowly while they can't be read. False when capture should stop:
+        /// no usable API on this TV, or capture was switched off while waiting.
+        /// </summary>
+        private async Task<bool> ReadConditionAsync()
+        {
+            while (!Capturer.GetCondition())
+            {
+                // A missing API never appears at runtime. Otherwise the API exists but the condition
+                // read failed (already persisted and notified): retry slowly instead of spinning.
+                if (Capturer.Unsupported) return false;
+                await Task.Delay(_mode.ConditionRetryMs);
+                if (!App.Configuration.Enabled)
+                {
+                    Capturer.SetState("stopped");
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>Display turned off: stop capturing and send one last frame through the active output.</summary>
         public async Task Stop()
         {
+            bool wasCapturing = App.Configuration.Enabled;
             if (App.Configuration.Enabled) App.Configuration.Enabled = false;
             IFrameOutput output = _output;
-            PointSet points = Letterbox.Inset ? _mode.BarsPoints : _mode.Points;
-            Capturer.SetCapturePoints(points.Points);
-            Color[] colors = Capturer.GetColors();
-            Levels.Apply(colors);
-            output.Prepare(colors, points);
-            await output.SendAsync();
+            try
+            {
+                PointSet points = Letterbox.Inset ? _mode.BarsPoints : _mode.Points;
+                Capturer.SetCapturePoints(points.Points);
+                Color[] colors = Capturer.GetColors();
+                Levels.Apply(colors);
+                output.Prepare(colors, points);
+                await output.SendAsync();
+            }
+            catch (Exception) { } // capture may not answer while the panel turns off
+            // Only a strip TizenGlow was driving: with capture off, WLED's own effect is left alone.
+            if (wasCapturing && output == Wled) await Wled.TurnOffWithTvAsync();
         }
     }
 }

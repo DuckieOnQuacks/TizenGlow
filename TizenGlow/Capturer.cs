@@ -95,9 +95,7 @@ namespace TizenGlow
                     continue;
                 }
 
-                Report("captureCondition", family.Name + " res=" + res + " points=" + condition.ScreenCapturePoints
-                    + " size=" + condition.Width + "x" + condition.Height
-                    + " density=" + condition.PixelDensityX + "x" + condition.PixelDensityY + " sleepMs=" + condition.SleepMS);
+                Report("captureCondition", Describe(family, res, condition));
 
                 if (res >= 0 && condition.ScreenCapturePoints > 0 && condition.Width > 0 && condition.Height > 0)
                 {
@@ -113,6 +111,38 @@ namespace TizenGlow
 
             Fail("error", firstReason, string.Join("; ", failures));
             return false;
+        }
+
+        private static string Describe(CaptureFamily family, int res, Condition condition)
+        {
+            return family.Name + " res=" + res + " points=" + condition.ScreenCapturePoints
+                + " size=" + condition.Width + "x" + condition.Height
+                + " density=" + condition.PixelDensityX + "x" + condition.PixelDensityY + " sleepMs=" + condition.SleepMS;
+        }
+
+        /// <summary>
+        /// Reads the capture settings again with the API already in use, for a running loop: the TV can change
+        /// them (a console, Game Mode, 120 Hz) without telling anyone, and frames sampled with stale ones fail
+        /// or land in the wrong place. Writes captureCondition only when they changed. False when the read
+        /// fails or the settings are unusable; the caller then re-probes with GetCondition.
+        /// </summary>
+        public static bool RefreshCondition(out bool changed)
+        {
+            changed = false;
+            CaptureFamily api = _api;
+            if (api == null) return false;
+            Condition condition;
+            int res;
+            try { res = api.MeasureCondition(out condition); }
+            catch (Exception) { return false; }
+            if (res < 0 || condition.ScreenCapturePoints <= 0 || condition.Width <= 0 || condition.Height <= 0) return false;
+            if (!condition.Equals(_condition))
+            {
+                _condition = condition;
+                changed = true;
+                Report("captureCondition", Describe(api, res, condition));
+            }
+            return true;
         }
 
         /// <summary>Persists a capture-loop exception. No notification: the loop may hit it repeatedly.</summary>

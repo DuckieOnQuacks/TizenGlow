@@ -51,6 +51,8 @@ namespace TizenGlow.Wled
         private int _blackThreshold;
         private bool _smoothing = true;
         private int _saturation = 100;
+        private bool _offWithTv = true;   // "wledTvOff": switch the strip off when the TV turns off
+        private bool _switchedOff;        // did so; the next frame sent switches it back on
         private double _gamma = 1.0;
         private byte[] _gammaTable; // null while gamma is 1.0
 
@@ -102,6 +104,7 @@ namespace TizenGlow.Wled
                     double now = _clock();
                     if (_host == null) return "not configured";
                     if (_testActive) return "testing";
+                    if (_switchedOff) return "switched off with the TV";
                     if (_lastSendFailed && now - _lastErrorAt < 5000) return "send error";
                     if (now - _lastSuccessAt < 2000) return "sending";
                     if (_layout == null) return "no LED layout";
@@ -160,14 +163,8 @@ namespace TizenGlow.Wled
                         bool retry = true;
                         try
                         {
-                            IPAddress ip;
-                            if (!IPAddress.TryParse(host, out ip))
-                            {
-                                ip = null;
-                                foreach (IPAddress a in await Dns.GetHostAddressesAsync(host))
-                                    if (a.AddressFamily == AddressFamily.InterNetwork) { ip = a; break; }
-                            }
-                            if (ip == null || !IsLocalNetwork(ip))
+                            IPAddress ip = await ResolveLocalAsync(host);
+                            if (ip == null)
                             {
                                 info = "not asking " + host + " for its LED count: not a local network address";
                                 retry = false;
@@ -255,6 +252,73 @@ namespace TizenGlow.Wled
             }
             lock (_lock) { _gamma = gamma; _gammaTable = table; _dirty = true; }
             return true;
+        }
+
+        /// <summary>"off": switch the strip off when the TV turns off (default); "leave": leave it to WLED's own effect.</summary>
+        public bool TrySetTvOff(string value)
+        {
+            if (value != "off" && value != "leave") return false;
+            lock (_lock) _offWithTv = value == "off";
+            return true;
+        }
+
+        /// <summary>
+        /// The TV turned off while TizenGlow drove the strip: switch it off with WLED's JSON API, ending realtime
+        /// at once ("live": false), instead of letting WLED fall back to its own effect after its 2.5 s timeout.
+        /// WLED still shows realtime data while off, so frames light it again when the TV comes back; the first
+        /// frame sent then also switches it back on, so it behaves as before once capture stops.
+        /// </summary>
+        public async Task TurnOffWithTvAsync()
+        {
+            string host;
+            lock (_lock)
+            {
+                if (!_offWithTv || _host == null) return;
+                host = _host;
+            }
+            string error = await PostStateAsync(host, "{\"on\":false,\"live\":false}");
+            lock (_lock)
+            {
+                if (error == null) _switchedOff = true;
+                else Fail(_clock(), "couldn't switch the strip off with the TV: " + error);
+            }
+        }
+
+        /// <summary>POST /json/state to WLED; null when it worked, otherwise why not. Same fences as the LED count check.</summary>
+        private async Task<string> PostStateAsync(string host, string json)
+        {
+            try
+            {
+                IPAddress ip = await ResolveLocalAsync(host);
+                if (ip == null) return host + " is not a local network address";
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2), MaxResponseContentBufferSize = MaxInfoBytes })
+                {
+                    var request = new HttpRequestMessage(HttpMethod.Post, "http://" + ip + ":" + InfoPort + "/json/state")
+                    {
+                        Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json"),
+                    };
+                    request.Headers.Host = host + (InfoPort == 80 ? "" : ":" + InfoPort);
+                    using (HttpResponseMessage response = await http.SendAsync(request)) response.EnsureSuccessStatusCode();
+                }
+                return null;
+            }
+            catch (Exception e)
+            {
+                return e.GetType().Name + ": " + (e.Message.Length > 120 ? e.Message.Substring(0, 120) + "..." : e.Message);
+            }
+        }
+
+        /// <summary>The host's IPv4 address when it is on the local network (connect to it, not the name, so DNS can't switch it), else null.</summary>
+        private static async Task<IPAddress> ResolveLocalAsync(string host)
+        {
+            IPAddress ip;
+            if (!IPAddress.TryParse(host, out ip))
+            {
+                ip = null;
+                foreach (IPAddress a in await Dns.GetHostAddressesAsync(host))
+                    if (a.AddressFamily == AddressFamily.InterNetwork) { ip = a; break; }
+            }
+            return ip != null && IsLocalNetwork(ip) ? ip : null;
         }
 
         /// <summary>Saturation 0-200 %: 100 as captured, 0 greyscale, 200 doubled.</summary>
@@ -476,6 +540,18 @@ namespace TizenGlow.Wled
                 _lastSendFailed = false;
                 _sendTimes.Enqueue(end);
                 while (_sendTimes.Count > 0 && _sendTimes.Peek() <= end - RateWindowMs) _sendTimes.Dequeue();
+                if (_switchedOff)
+                {
+                    // Back from TV off: this frame already holds the strip (realtime), so switching WLED on
+                    // now shows no flash of its own effect, and it returns to that effect when capture stops.
+                    _switchedOff = false;
+                    string host = _host;
+                    Task.Run(async () =>
+                    {
+                        string error = await PostStateAsync(host, "{\"on\":true}");
+                        if (error != null) lock (_lock) Fail(_clock(), "couldn't switch the strip back on: " + error);
+                    });
+                }
                 return true;
             }
             catch (Exception e)
