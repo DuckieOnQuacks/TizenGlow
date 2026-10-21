@@ -98,6 +98,8 @@ The **Target FPS** button under Capture Quality sets how fast the service captur
 
 While capture runs, the service reads the TV's capture settings again every 5 seconds, and after 2 failed frames in a row, because the TV can change them without warning (a game console, Game Mode, 120 Hz): frames taken with stale settings fail or sample the wrong spots. When they changed, capture carries on with the new ones at once; if the capture API stops answering, it is probed again. Only a change is written (the Points row and `tools/watch-status.js` show it).
 
+**Game consoles:** Samsung's **Game Mode** skips the TV's picture processing to cut input lag, and the capture is part of that processing, so with Game Mode on (which a PS5 or Xbox switches on by itself) the LEDs don't follow the picture. Turn it off for the console's input under **Settings > Connection > Game Mode Settings**; that costs a little input lag. Confirmed with a PS5 on a QN65S90D.
+
 Capture, image and send time count toward each frame, so the service only waits for whatever is left of the frame interval. If Capture FPS stays below the target, the TV's capture API is the limit (see Capture above); pick a mode with fewer points.
 
 ### Levels

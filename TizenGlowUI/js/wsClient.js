@@ -1,5 +1,5 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.3.0';
+const uiVersion = '1.3.1';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
 const minService = '1.3.0'; // strip off with the TV
@@ -176,6 +176,10 @@ function applyUiScale(percent) {
 function fitStatus() {
     const column = document.getElementById('captureStatus'), body = document.getElementById('statusBody');
     if (!column || !body || !column.clientHeight) return;
+    // While a box is being typed in, the TV keyboard takes the bottom of the screen and the page shrinks to
+    // the space above it: keep the column's size rather than squeezing it into that gap.
+    const active = document.activeElement;
+    if (active && active.tagName === 'INPUT' && active.type !== 'checkbox' && !active.readOnly) return;
     body.style.zoom = '';
     const padding = column.scrollHeight - body.offsetHeight; // the column's own, which zoom doesn't shrink
     const ratio = (column.clientHeight - padding) / body.offsetHeight;
