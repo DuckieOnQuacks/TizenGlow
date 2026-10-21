@@ -86,6 +86,7 @@ namespace TizenGlow.WebSocket
             if (Preference.Contains("wledGamma")) Wled.TrySetGamma(Preference.Get<string>("wledGamma"));
             if (Preference.Contains("wledSaturation")) Wled.TrySetSaturation(Preference.Get<string>("wledSaturation"));
             if (Preference.Contains("letterbox")) Letterbox.TrySetMode(Preference.Get<string>("letterbox"));
+            Autostart.TrySet(Preference.Contains("autostart") ? Preference.Get<string>("autostart") : "on"); // re-registered on every start
             if (Preference.Contains("levels")) Levels.TrySetEnabled(Preference.Get<string>("levels"));
             if (Preference.Contains("levelsWhite")) Levels.TrySetWhite(Preference.Get<string>("levelsWhite"));
             if (Preference.Contains("levelsBlack")) Levels.TrySetBlack(Preference.Get<string>("levelsBlack"));
@@ -135,6 +136,7 @@ namespace TizenGlow.WebSocket
             s.sleepMs = condition.SleepMS;
             s.ceilingFps = points.CeilingFps(condition.ScreenCapturePoints, condition.SleepMS);
             s.letterbox = Letterbox.State;
+            s.autostart = Autostart.State;
             s.levels = new CaptureStats.LevelsInfo { enabled = Levels.Enabled, white = Levels.White, black = Levels.Black, measuring = Levels.Measuring, result = Levels.Result };
             return s;
         }

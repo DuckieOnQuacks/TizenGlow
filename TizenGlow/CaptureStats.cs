@@ -178,6 +178,8 @@ namespace TizenGlow
             public double? ceilingFps;
             /// <summary>Black bars: off, watching, detected or always.</summary>
             public string letterbox;
+            /// <summary>Start with the TV: on, off, or why the TV refused it.</summary>
+            public string autostart;
             public LevelsInfo levels;
 
             // Active output, filled by HyperionClient / the output.

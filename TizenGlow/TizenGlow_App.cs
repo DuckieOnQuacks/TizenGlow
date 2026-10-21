@@ -16,6 +16,9 @@ namespace TizenGlow
             Task.Run(() => WebSocketServer.StartServerAsync());
             Display.StateChanged += Display_StateChanged;
             Capturer.Probe(); // publish detectedApi / captureState even while capture is disabled
+            // Started by the autostart alarm while the TV is in standby: wait for the screen to come on
+            // (Display_StateChanged turns capture on then) instead of capturing a dark panel.
+            try { if (Display.State == DisplayState.Off) Configuration.Enabled = false; } catch { }
             client = new HyperionClient();
         }
 

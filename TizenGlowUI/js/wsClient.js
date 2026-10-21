@@ -1,8 +1,8 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.1.0';
+const uiVersion = '1.2.0';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
-const minService = '1.1.0'; // capture modes by points, black bars, levels, gliding, preview
+const minService = '1.2.0'; // start with the TV
 
 let client;
 let deviceIP;
@@ -153,9 +153,11 @@ window.stepGamma = gammaSel.step;
 const letterboxLabels = { off: 'Off', auto: 'Auto', on: 'Always' };
 const letterboxSel = makeSelector('letterbox', Object.keys(letterboxLabels), 'auto', v => `Black bars: &lt; ${letterboxLabels[v]} &gt;`, 'letterbox');
 const levelsSel = makeSelector('levels', ['on', 'off'], 'on', v => `Levels: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'levels');
+const autostartSel = makeSelector('autostart', ['on', 'off'], 'on', v => `Start with the TV: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'autostart');
 window.stepLetterbox = letterboxSel.step;
 window.stepLevels = levelsSel.step;
-const captureKeys = ['letterbox', 'levels'];
+window.stepAutostart = autostartSel.step;
+const captureKeys = ['letterbox', 'levels', 'autostart'];
 
 // LED layout: start corner and direction are saved together with the counts.
 const cornerLabels = { topleft: 'Top Left', topright: 'Top Right', bottomright: 'Bottom Right', bottomleft: 'Bottom Left' };
@@ -387,6 +389,7 @@ function showCaptureStats(msg) {
         : `${s.points} (${s.pointsPerEdge})` + (s.pointsPerRound > 0 ? `, ${s.pointsPerRound} per round` : '')
         + (s.sleepMs > 0 ? `, ${s.sleepMs} ms wait: max ${s.ceilingFps} fps` : ''));
     setText('statLetterbox', has(s && s.letterbox) ? s.letterbox : '-');
+    setText('statAutostart', !has(s && s.autostart) ? '-' : s.autostart === 'on' ? 'on (checks every 10 min)' : s.autostart);
     const lv = s && s.levels;
     setText('statLevels', !lv ? '-' : !lv.enabled ? 'off' : lv.white === '255,255,255' && lv.black === '0,0,0' ? 'not measured' : `white ${lv.white}, black ${lv.black}`);
     const status = document.getElementById('levelsStatus');
@@ -462,6 +465,8 @@ function onMessage(data) {
                 letterboxSel.show(msg.error ? 'auto' : msg.value);
             } else if (msg.key === 'levels') {
                 levelsSel.show(msg.error ? 'on' : msg.value);
+            } else if (msg.key === 'autostart') {
+                autostartSel.show(msg.error ? 'on' : msg.value);
             } else if (msg.key === 'ledPreview') {
                 showLedPreview(msg);
             } else if (msg.key === 'captureStats') {

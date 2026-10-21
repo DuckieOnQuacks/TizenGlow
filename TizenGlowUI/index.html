@@ -29,7 +29,8 @@
                 <button id="captureMode" data-step="stepCaptureMode" onclick="stepCaptureMode(1, true)">Capture: Fast | <span class="active">Balanced</span> | Detailed</button>
                 <button id="targetFps" data-step="stepTargetFps" onclick="stepTargetFps(1, true)">Target FPS: &lt; 15 &gt;</button>
                 <button id="letterbox" data-step="stepLetterbox" onclick="stepLetterbox(1, true)">Black bars: &lt; Auto &gt;</button>
-                <p class="hint">Fast samples 6 points, Balanced 8, Detailed 14: fewer points, faster frames (the TV waits after every 2). Black bars: Auto moves the top and bottom samples into the picture when a film is letterboxed. OK cycles a setting, LEFT / RIGHT step through it.</p>
+                <button id="autostart" data-step="stepAutostart" onclick="stepAutostart(1, true)">Start with the TV: &lt; On &gt;</button>
+                <p class="hint">Fast samples 6 points, Balanced 8, Detailed 14: fewer points, faster frames (the TV waits after every 2). Black bars: Auto moves the top and bottom samples into the picture when a film is letterboxed. Start with the TV: after a restart or power cut, the service starts again by itself within 10 minutes, without opening TizenBrew. OK cycles a setting, LEFT / RIGHT step through it.</p>
             </section>
 
             <section class="card">
@@ -159,6 +160,7 @@
                 <span>Peak sample</span><span id="statPeak" class="wide">-</span>
                 <span>Points</span><span id="statPoints" class="wide">-</span>
                 <span>Black bars</span><span id="statLetterbox">-</span>
+                <span>Autostart</span><span id="statAutostart">-</span>
                 <span>Levels</span><span id="statLevels">-</span>
             </div>
             <canvas id="ledPreview" class="wledOnly" width="320" height="180"></canvas>

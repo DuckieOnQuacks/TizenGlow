@@ -254,6 +254,11 @@ namespace TizenGlow.WebSocket
                         App.client.Wled.TryTest(setConfigEvent.value); // red/green/blue/white/off: a command, never saved
                         return;
                     }
+                case "autostart":
+                    {
+                        if (!Autostart.TrySet(setConfigEvent.value)) return; // on / off
+                        break;
+                    }
                 case "letterbox":
                     {
                         if (!Letterbox.TrySetMode(setConfigEvent.value)) return; // off / auto / on
