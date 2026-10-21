@@ -163,6 +163,16 @@ The info box sits in the middle of the screen, where nothing is sampled, and hid
 
 Edge bands are 12.5% of the screen deep and corner blocks a third of it each way; the capture samples sit 5% in from the edges (with Fast's single side point in the middle of the side, Four Corners leaves the sides dark). **Calibrate levels** (under Levels) uses the same screen on its own: Full White and Full Black with the measurement in between, and any key cancels it. Colours are exact CSS colours and gradients (no canvas, filters or opacity); the hue gradients have a stop at every 60 degrees, so they are exact hues throughout.
 
+## Watching the status from a PC
+
+The settings page covers the screen, so it can't show what capture does while you watch something else (a game console, an HDMI input, an app). From a PC on the same network, with [Node.js](https://nodejs.org/) 22 or newer:
+
+```bash
+node tools/watch-status.js 192.168.1.20
+```
+
+It prints the capture state, capture and send FPS, frame time, peak sample, points and black-bar state once a second, plus the capture condition and last error whenever they change. It only reads status and never changes a setting. If it can't connect, the TV is off or the TizenGlow service isn't running.
+
 ## Releasing a new version
 
 1. Set the same version in `TizenGlow/tizen-manifest.xml`, `package.json` and `uiVersion` in `TizenGlowUI/js/wsClient.js`. Raise `minService` in the same file only when the page needs something new from the service; leave it for a page-only release, whose TPK is then optional.
