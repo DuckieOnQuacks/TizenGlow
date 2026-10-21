@@ -1,5 +1,5 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.2.0';
+const uiVersion = '1.2.1';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
 const minService = '1.2.0'; // start with the TV
@@ -45,6 +45,7 @@ function onOpen() {
     send({ event: events.ReadConfig, key: 'captureMode' });
     send({ event: events.ReadConfig, key: 'targetFps' });
     send({ event: events.ReadConfig, key: 'nativeVersion' });
+    send({ event: events.ReadConfig, key: 'uiScale' });
     for (const key of wledKeys) send({ event: events.ReadConfig, key });
     for (const key of captureKeys) send({ event: events.ReadConfig, key });
     readCaptureStatus();
@@ -157,6 +158,26 @@ const autostartSel = makeSelector('autostart', ['on', 'off'], 'on', v => `Start 
 window.stepLetterbox = letterboxSel.step;
 window.stepLevels = levelsSel.step;
 window.stepAutostart = autostartSel.step;
+
+// Page size: scales every size in main.css (--px). Saved by the service like any other setting.
+const uiScaleSel = makeSelector('uiScale', [50, 60, 70, 80, 90, 100], 100, v => `Page size: &lt; ${v}%${v === 50 ? ' (4K)' : ''} &gt;`, 'uiScale', applyUiScale);
+window.stepUiScale = uiScaleSel.step;
+
+function applyUiScale(percent) {
+    document.documentElement.style.setProperty('--px', `${percent / 100}px`);
+    fitStatus();
+}
+
+// Shrinks the status column's content when it would not fit (a long error, a large page size) instead of
+// cutting it off: nothing can scroll it with the remote.
+function fitStatus() {
+    const column = document.getElementById('captureStatus'), body = document.getElementById('statusBody');
+    if (!column || !body || !column.clientHeight) return;
+    body.style.zoom = '';
+    const padding = column.scrollHeight - body.offsetHeight; // the column's own, which zoom doesn't shrink
+    const ratio = (column.clientHeight - padding) / body.offsetHeight;
+    if (ratio < 1) body.style.zoom = String(Math.floor(ratio * 100) / 100);
+}
 const captureKeys = ['letterbox', 'levels', 'autostart'];
 
 // LED layout: start corner and direction are saved together with the counts.
@@ -321,7 +342,7 @@ window.testWled = color => {
 }
 
 // Written by the native service (Capturer.cs) as preferences; read back with ReadConfig.
-const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersion', 'captureCondition', 'lastCaptureError'];
+const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersion', 'lastCaptureError'];
 
 function readCaptureStatus() {
     for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
@@ -398,6 +419,7 @@ function showCaptureStats(msg) {
         status.className = /not measured/.test(lv.result) ? 'hint warn' : 'hint';
         status.textContent = sentence(lv.result) + (lv.measuring ? '' : ` Now: white ${lv.white}, black ${lv.black}.`);
     }
+    fitStatus();
 }
 
 // "white measured ..." -> "White measured ...." (a result that already ends in ? or . keeps it).
@@ -407,8 +429,16 @@ const sentence = r => r.charAt(0).toUpperCase() + r.slice(1) + (/[.?!]$/.test(r)
 function showLedPreview(msg) {
     const canvas = document.getElementById('ledPreview');
     if (!canvas || !canvas.getContext) return;
+    // Drawn at the screen's real pixel density, so it stays sharp whatever the page size.
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth || canvas.width, H = canvas.clientHeight || canvas.height;
+    if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+        canvas.width = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+    }
     const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height, band = 14;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const band = Math.max(4, Math.round(H * 0.08));
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, W, H);
     const v = msg.error ? null : msg.value;
@@ -467,6 +497,8 @@ function onMessage(data) {
                 levelsSel.show(msg.error ? 'on' : msg.value);
             } else if (msg.key === 'autostart') {
                 autostartSel.show(msg.error ? 'on' : msg.value);
+            } else if (msg.key === 'uiScale') {
+                uiScaleSel.show(msg.error ? 100 : Number(msg.value));
             } else if (msg.key === 'ledPreview') {
                 showLedPreview(msg);
             } else if (msg.key === 'captureStats') {

@@ -39,6 +39,12 @@
             </section>
 
             <section class="card">
+                <h2>Page</h2>
+                <button id="uiScale" data-step="stepUiScale" onclick="stepUiScale(1, true)">Page size: &lt; 100% &gt;</button>
+                <p class="hint">Smaller fits more on screen: 50% lays the page out as if the screen were 4K.</p>
+            </section>
+
+            <section class="card">
                 <h2>Calibration</h2>
                 <button id="calibrationOpen" onclick="openCalibration()">Open Calibration Screen</button>
                 <p id="calibrationStatus" class="hint">Full-screen test patterns shown by the TV, so the LEDs follow them through the normal capture and output. Enable capture first.</p>
@@ -137,6 +143,7 @@
 
         <!-- Status: read-only, always on screen. -->
         <aside id="captureStatus" class="column card">
+          <div id="statusBody">
             <h2>Status</h2>
             <div class="headline">
                 <div><span class="label">State</span><span id="captureState">-</span></div>
@@ -175,10 +182,10 @@
             </div>
             <div class="details">
                 <p><span class="label">Frame</span> <span id="statBreakdown">-</span></p>
-                <p><span class="label">Condition</span> <span id="captureCondition">-</span></p>
                 <p><span class="label">Last error</span> <span id="lastCaptureError">-</span></p>
                 <p class="wledOnly"><span class="label">Output error</span> <span id="statOutputError">-</span></p>
             </div>
+          </div>
         </aside>
     </main>
 </body>
@@ -194,6 +201,27 @@
         // Keep the focused control in the middle of the settings column, not at its edge.
         const go = el => { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'center' }); };
 
+        // The TV opens its keyboard as soon as a text box gets focus, so moving past one with UP / DOWN
+        // popped it up. Boxes stay read-only while you move through them; OK makes the focused one
+        // editable and opens the keyboard, and leaving it (Done, Cancel, UP / DOWN) makes it read-only again.
+        const isField = el => el && el.tagName === 'INPUT' && el.type !== 'checkbox';
+        Array.prototype.forEach.call(document.querySelectorAll('input'), input => {
+            if (!isField(input)) return;
+            input.readOnly = true;
+            input.addEventListener('blur', () => { input.readOnly = true; });
+        });
+        const edit = input => {
+            input.blur();           // read-only again for a moment
+            input.readOnly = false;
+            input.focus();          // focused as an editable box: the TV opens its keyboard
+        };
+        const stopEditing = input => {
+            input.readOnly = true;  // set here too: blur events don't fire everywhere
+            input.blur();           // closes the keyboard
+            input.focus({ preventScroll: true }); // stay on it, so UP / DOWN carry on from here
+        };
+        const leave = el => { if (isField(el)) el.readOnly = true; };
+
         document.addEventListener('keydown', function (e) {
             const list = focusables();
             let index = list.indexOf(document.activeElement);
@@ -202,13 +230,17 @@
 
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                if (index < list.length - 1) go(list[index + 1]);
+                if (index < list.length - 1) { leave(element); go(list[index + 1]); }
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                if (index > 0) go(list[index - 1]);
+                if (index > 0) { leave(element); go(list[index - 1]); }
             } else if (e.key == 'Enter') {
-                // Text fields keep their native Enter so the TV keyboard (IME) can open.
-                if (!element || (element.tagName === 'INPUT' && element.type !== 'checkbox')) return;
+                if (!element) return;
+                if (isField(element)) {
+                    if (!element.readOnly) return; // already typing: the keyboard's own Enter
+                    e.preventDefault();
+                    return edit(element);
+                }
                 e.preventDefault();
                 element.click();
                 if (element.classList.contains('ssdpItem')) {
@@ -220,8 +252,8 @@
                 e.preventDefault();
                 window[element.dataset.step](e.key === 'ArrowRight' ? 1 : -1);
             } else if (e.keyCode === 65376 || e.keyCode === 65385) {
-                // Samsung IME Done / Cancel: close the keyboard, Up/Down keep navigating from this field.
-                document.activeElement.blur();
+                // Samsung keyboard Done / Cancel: close it and stay on the box.
+                if (isField(document.activeElement)) stopEditing(document.activeElement);
             }
         });
 

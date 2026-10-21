@@ -36,7 +36,11 @@ This saves the same `rpcServer` setting that selecting an SSDP device does, so i
 
 ## Using TizenGlowUI with the remote
 
-Settings are on the left, status on the right. UP / DOWN move between controls (the settings column scrolls to keep the selected one in view), OK presses buttons and opens the keyboard on text fields, and on settings shown as `< value >` or `A | B | C`, LEFT / RIGHT step through the choices while OK cycles them. Only the settings for the selected output are shown.
+Settings are on the left, status on the right. UP / DOWN move between controls (the settings column scrolls to keep the selected one in view), OK presses buttons, and on settings shown as `< value >` or `A | B | C`, LEFT / RIGHT step through the choices while OK cycles them. Only the settings for the selected output are shown.
+
+Text boxes (IP addresses, ports, LED counts) don't open the TV keyboard as you move past them: press OK on one to type, and the keyboard's Done or Cancel to finish (moving on with UP / DOWN works too).
+
+**Page size** (under Page) scales the whole page: 100% is laid out for 1920x1080, 50% as if the screen were 4K, with twice the room. Smaller sizes fit more on screen; 60% keeps the text easy to read from the couch. The status column always fits on screen: when it wouldn't, it shrinks a little rather than being cut off.
 
 ## Native Capture Status
 
@@ -48,7 +52,7 @@ TizenGlowUI shows what the service found:
 |---|---|
 | State | `idle` (capture disabled), `starting`, `running` (frames are being captured), `stopped`, `no-server` (no HyperHDR address saved), `unsupported` (no complete API), `error` (see Last error) |
 | API | `ppi_ve`, `ve`, `cs_ve` or `unsupported`, plus the platform version |
-| Condition | What the panel reported: result code, capture points, resolution, pixel density, sleep |
+| Points | Points sampled per frame, how many the TV reads per round and the wait after each, and the resulting frame-rate ceiling (the full condition line is in `tools/watch-status.js`) |
 | Last error | Timestamped error with exception, API, library path, platform version and which symbol families were complete, partial or missing |
 
 `not reported` means the TizenGlow service isn't installed or isn't running.
@@ -82,7 +86,7 @@ The **Capture** selector under Enabled picks how many points a frame samples (OK
 | Pause after a failed frame | 1 s | 5 s | 5 s |
 | Condition read retry | 5 s | 10 s | 10 s |
 
-The firmware reads `ScreenCapturePoints` points per round and asks for a pause (`sleepMs` in Condition) after every round, so a frame takes rounds x wait: the point count is the only lever on frame rate and latency. Fewer points means faster, lower-latency frames and coarser colour along each edge (Fast gives each side one colour); more points means finer colour. Points are evenly spaced along each edge, 5% in from it, and both outputs map by position, so any count works. **Points** in the status shows the count, the firmware's numbers and the resulting ceiling. A saved "smooth" mode from older versions becomes Detailed.
+The firmware reads `ScreenCapturePoints` points per round and asks for a pause (`sleepMs`) after every round, so a frame takes rounds x wait: the point count is the only lever on frame rate and latency. Fewer points means faster, lower-latency frames and coarser colour along each edge (Fast gives each side one colour); more points means finer colour. Points are evenly spaced along each edge, 5% in from it, and both outputs map by position, so any count works. **Points** in the status shows the count, the firmware's numbers and the resulting ceiling. A saved "smooth" mode from older versions becomes Detailed.
 
 ### Black bars
 

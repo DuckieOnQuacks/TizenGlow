@@ -1,6 +1,9 @@
 /* Laid out for a 1920x1080 TV viewed from the couch: dark (OLED, dim rooms), large type, overscan-safe
    margins, settings on the left (scrolls with the D-pad), status on the right (always visible). */
 :root {
+    /* Page size: every size in this file is a multiple of --px. 1px lays the page out for 1920x1080;
+       0.5px lays it out as if the screen were 4K (half size, twice the room). Set from Page size. */
+    --px: 1px;
     --bg: #0d1117;
     --card: #161b25;
     --raised: #202838;
@@ -34,17 +37,17 @@ a {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 32px 80px 0;
+    padding: calc(32 * var(--px)) calc(80 * var(--px)) 0;
 }
 
 h1 {
     margin: 0;
-    font-size: 48px;
+    font-size: calc(48 * var(--px));
 }
 
 .pills {
     display: flex;
-    gap: 14px;
+    gap: calc(14 * var(--px));
 }
 
 .pills .pill:empty {
@@ -52,18 +55,18 @@ h1 {
 }
 
 .pill {
-    padding: 8px 22px;
-    border-radius: 999px;
+    padding: calc(8 * var(--px)) calc(22 * var(--px));
+    border-radius: calc(999 * var(--px));
     background-color: var(--raised);
     color: var(--dim);
-    font-size: 24px;
+    font-size: calc(24 * var(--px));
 }
 
 .columns {
     display: flex;
-    gap: 40px;
-    height: calc(100vh - 112px);
-    padding: 24px 80px 40px;
+    gap: calc(40 * var(--px));
+    height: calc(100vh - calc(112 * var(--px)));
+    padding: calc(24 * var(--px)) calc(80 * var(--px)) calc(40 * var(--px));
     box-sizing: border-box;
 }
 
@@ -76,50 +79,57 @@ h1 {
     flex: 1.1;
     display: flex;
     flex-direction: column;
-    gap: 24px;
-    padding: 8px 18px 8px 8px; /* room for the focus glow inside the scroll area */
+    gap: calc(24 * var(--px));
+    padding: calc(8 * var(--px)) calc(18 * var(--px)) calc(8 * var(--px)) calc(8 * var(--px)); /* room for the focus glow inside the scroll area */
 }
 
 #captureStatus {
     flex: 1;
-    margin: 8px 0;
+    margin: calc(8 * var(--px)) 0;
+}
+
+/* Shrunk by fitStatus() (wsClient.js) when it would not fit, instead of being cut off. */
+#statusBody {
+    display: flex;
+    flex-direction: column;
+    gap: calc(18 * var(--px));
 }
 
 .column::-webkit-scrollbar {
-    width: 10px;
+    width: calc(10 * var(--px));
 }
 
 .column::-webkit-scrollbar-thumb {
     background-color: var(--line);
-    border-radius: 5px;
+    border-radius: calc(5 * var(--px));
 }
 
 .card {
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 28px;
+    gap: calc(18 * var(--px));
+    padding: calc(28 * var(--px));
     background-color: var(--card);
     border: 1px solid var(--line);
-    border-radius: 22px;
+    border-radius: calc(22 * var(--px));
 }
 
 .card h2 {
     margin: 0;
-    font-size: 30px;
+    font-size: calc(30 * var(--px));
 }
 
 .card h3 {
     margin: 0;
     color: var(--dim);
-    font-size: 24px;
+    font-size: calc(24 * var(--px));
     font-weight: normal;
 }
 
 .hint {
     margin: 0;
     color: var(--dim);
-    font-size: 22px;
+    font-size: calc(22 * var(--px));
 }
 
 /* Only the active output's settings and status rows are shown (and reachable with the D-pad). */
@@ -130,7 +140,7 @@ body:not(.output-wled) .wledOnly, body.output-wled .hyperhdrOnly {
 #hyperhdrSection, #wledSection {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: calc(24 * var(--px));
 }
 
 .pill.warn {
@@ -151,87 +161,87 @@ body:not(.output-wled) .wledOnly, body.output-wled .hyperhdrOnly {
 
 button {
     width: 100%;
-    padding: 16px 24px;
+    padding: calc(16 * var(--px)) calc(24 * var(--px));
     background-color: var(--raised);
     color: var(--text);
     border: 3px solid transparent;
-    border-radius: 16px;
+    border-radius: calc(16 * var(--px));
     font-family: inherit;
-    font-size: 30px;
+    font-size: calc(30 * var(--px));
     text-align: left;
 }
 
 button .active {
-    padding: 2px 12px;
+    padding: 2px calc(12 * var(--px));
     background-color: var(--accent);
     color: #1a1206;
-    border-radius: 10px;
+    border-radius: calc(10 * var(--px));
 }
 
 .form {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: calc(16 * var(--px));
 }
 
 .form label {
     color: var(--dim);
-    font-size: 24px;
+    font-size: calc(24 * var(--px));
 }
 
 .form p {
     margin: 0;
-    font-size: 24px;
+    font-size: calc(24 * var(--px));
 }
 
 .form p.error {
-    padding: 12px 16px;
+    padding: calc(12 * var(--px)) calc(16 * var(--px));
     background-color: #4a161b;
     border: 2px solid var(--bad);
-    border-radius: 14px;
+    border-radius: calc(14 * var(--px));
     color: #fff;
 }
 
 .form input {
     width: 100%;
     box-sizing: border-box;
-    padding: 14px 20px;
+    padding: calc(14 * var(--px)) calc(20 * var(--px));
     background-color: #0f141c;
     color: var(--text);
     border: 3px solid var(--line);
-    border-radius: 14px;
+    border-radius: calc(14 * var(--px));
     font-family: inherit;
-    font-size: 30px;
+    font-size: calc(30 * var(--px));
 }
 
 .sides {
     display: grid;
     grid-template-columns: auto 1fr auto 1fr;
-    gap: 14px 18px;
+    gap: calc(14 * var(--px)) calc(18 * var(--px));
     align-items: center;
 }
 
 .total {
-    font-size: 26px;
+    font-size: calc(26 * var(--px));
 }
 
 .buttonRow {
     display: flex;
-    gap: 12px;
+    gap: calc(12 * var(--px));
 }
 
 .buttonRow button {
     flex: 1;
-    padding: 16px 8px;
+    padding: calc(16 * var(--px)) calc(8 * var(--px));
     text-align: center;
 }
 
 .swatch::before {
     content: '';
     display: inline-block;
-    width: 22px;
-    height: 22px;
-    margin-right: 10px;
+    width: calc(22 * var(--px));
+    height: calc(22 * var(--px));
+    margin-right: calc(10 * var(--px));
     vertical-align: -3px;
     background-color: var(--swatch);
     border: 2px solid rgba(255, 255, 255, 0.4);
@@ -242,8 +252,8 @@ button .active {
 .toggle {
     display: flex;
     align-items: center;
-    gap: 20px;
-    font-size: 30px;
+    gap: calc(20 * var(--px));
+    font-size: calc(30 * var(--px));
 }
 
 .toggle input {
@@ -252,21 +262,21 @@ button .active {
     position: relative;
     flex: none;
     box-sizing: border-box;
-    width: 88px;
-    height: 48px;
+    width: calc(88 * var(--px));
+    height: calc(48 * var(--px));
     margin: 0;
     background-color: #3a4458;
     border: 3px solid transparent;
-    border-radius: 24px;
+    border-radius: calc(24 * var(--px));
 }
 
 .toggle input::after {
     content: '';
     position: absolute;
-    top: 5px;
-    left: 5px;
-    width: 32px;
-    height: 32px;
+    top: calc(5 * var(--px));
+    left: calc(5 * var(--px));
+    width: calc(32 * var(--px));
+    height: calc(32 * var(--px));
     background-color: #fff;
     border-radius: 50%;
 }
@@ -276,34 +286,34 @@ button .active {
 }
 
 .toggle input:checked::after {
-    left: 45px;
+    left: calc(45 * var(--px));
 }
 
 #ssdpItems {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: calc(12 * var(--px));
 }
 
 #ssdpItems:empty::before {
     content: 'None found yet. Use Manual HyperHDR Server below.';
     color: var(--dim);
-    font-size: 22px;
+    font-size: calc(22 * var(--px));
 }
 
 .ssdpItem {
-    padding: 16px 24px;
+    padding: calc(16 * var(--px)) calc(24 * var(--px));
     background-color: var(--raised);
     border: 3px solid transparent;
-    border-radius: 16px;
-    font-size: 30px;
+    border-radius: calc(16 * var(--px));
+    font-size: calc(30 * var(--px));
 }
 
 /* One focus style everywhere: the remote has no pointer, so focus must always be obvious. */
 button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 24px rgba(255, 152, 0, 0.55);
+    box-shadow: 0 0 calc(24 * var(--px)) rgba(255, 152, 0, 0.55);
 }
 
 /* ---- status ---- */
@@ -311,27 +321,27 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
 .headline {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
+    gap: calc(14 * var(--px));
 }
 
 .headline > div {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 14px 18px;
+    gap: calc(4 * var(--px));
+    padding: calc(14 * var(--px)) calc(18 * var(--px));
     background-color: var(--raised);
-    border-radius: 16px;
+    border-radius: calc(16 * var(--px));
 }
 
 .headline > div > span:last-child {
-    font-size: 42px;
+    font-size: calc(42 * var(--px));
     font-weight: bold;
     overflow-wrap: anywhere;
 }
 
 .label {
     color: var(--dim);
-    font-size: 22px;
+    font-size: calc(22 * var(--px));
 }
 
 #captureState[data-state="running"] { color: var(--ok); }
@@ -342,9 +352,9 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
 #statsGrid, #wledStatsGrid {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 10px 18px;
+    gap: calc(10 * var(--px)) calc(18 * var(--px));
     align-items: baseline;
-    font-size: 25px;
+    font-size: calc(25 * var(--px));
 }
 
 #statsGrid > .wide {
@@ -352,7 +362,7 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
 }
 
 #wledStatsGrid {
-    padding-top: 14px;
+    padding-top: calc(14 * var(--px));
     border-top: 1px solid var(--line);
 }
 
@@ -365,11 +375,13 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
 }
 
 #ledPreview {
+    /* A fixed size in page units, so it shrinks with the page and with the status column's fit. */
     display: block;
-    width: 100%;
-    height: auto;
-    margin-top: 14px;
-    border-radius: 10px;
+    width: calc(640 * var(--px));
+    height: calc(360 * var(--px));
+    max-width: 100%;
+    margin: calc(14 * var(--px)) auto 0;
+    border-radius: calc(10 * var(--px));
 }
 
 .hint.warn {
@@ -379,14 +391,14 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
 .details {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-top: 14px;
+    gap: calc(8 * var(--px));
+    padding-top: calc(14 * var(--px));
     border-top: 1px solid var(--line);
 }
 
 .details p {
     margin: 0;
-    font-size: 23px;
+    font-size: calc(23 * var(--px));
     overflow-wrap: anywhere;
 }
 
@@ -418,22 +430,22 @@ button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
     max-height: 30%; /* the corner blocks start a third of the way in */
     overflow: hidden;
     box-sizing: border-box;
-    padding: 20px 32px;
+    padding: calc(20 * var(--px)) calc(32 * var(--px));
     border: 2px solid var(--line);
-    border-radius: 16px;
+    border-radius: calc(16 * var(--px));
     background: #000000;
     color: var(--dim);
-    font-size: 24px;
+    font-size: calc(24 * var(--px));
     text-align: center;
 }
 
 #calInfo p {
-    margin: 8px 0;
+    margin: calc(8 * var(--px)) 0;
 }
 
 #calName {
     color: var(--text);
-    font-size: 34px;
+    font-size: calc(34 * var(--px));
     font-weight: 700;
 }
 
