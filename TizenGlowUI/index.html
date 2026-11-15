@@ -223,24 +223,16 @@
             } else if (e.keyCode === 65376 || e.keyCode === 65385) {
                 // Samsung keyboard Done / Cancel: close it and stay on the box.
                 if (isField(document.activeElement)) stopEditing(document.activeElement);
+            } else if (e.keyCode === 10009 && standalone) {
+                // Back in the installed app (under TizenBrew it belongs to TizenBrew): end typing, or close the app.
+                if (isField(document.activeElement) && !document.activeElement.readOnly) stopEditing(document.activeElement);
+                else tizen.application.getCurrentApplication().exit();
             }
         });
 
         for (const id of ['ledTop', 'ledRight', 'ledBottom', 'ledLeft']) document.getElementById(id).addEventListener('input', showLedTotal);
 
-        fetch('http://127.0.0.1:8081').then(res => res.text()).then(ip => {
-            deviceIP = ip;
-
-            const testWS = new WebSocket(`ws://${ip}:8086`);
-
-            testWS.onopen = function () {
-                testWS.close();
-                open();
-            };
-            testWS.onerror = function () {
-                location.reload();
-            };
-        });
+        startPage();
     };
 </script>
 

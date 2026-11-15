@@ -7,6 +7,57 @@ const minService = '1.4.0'; // WLED only
 let client;
 let deviceIP;
 
+// The installed app (TizenGlow-<version>.wgt) loads this page from file:, the TizenBrew module over HTTP.
+const standalone = location.protocol === 'file:';
+const serviceAppId = 'io.gh.duckieonquacks.TizenGlow';
+
+// Finds the service and connects. TizenBrew starts the service and knows the TV's address; the installed
+// app starts the service itself and reaches it on this TV.
+function startPage() {
+    if (!standalone) {
+        fetch('http://127.0.0.1:8081').then(res => res.text()).then(ip => tryHosts([ip]));
+        return;
+    }
+    launchService();
+    tryHosts(['127.0.0.1', tvIp()]);
+}
+
+// Test-connects to each host in turn and opens the page's connection on the first that answers.
+function tryHosts(hosts) {
+    hosts = hosts.filter(Boolean);
+    if (!hosts.length) {
+        // Nothing answered. The app waits for the service it just started; the module reloads, as before.
+        if (standalone) setTimeout(startPage, 1000);
+        else location.reload();
+        return;
+    }
+    const test = new WebSocket(`ws://${hosts[0]}:8086`);
+    test.onopen = () => {
+        test.close();
+        deviceIP = hosts[0];
+        open();
+    };
+    test.onerror = () => tryHosts(hosts.slice(1));
+}
+
+// What TizenBrew's js/service.js does for the module. Launching a service that already runs is harmless.
+function launchService() {
+    const missing = () => { document.getElementById('status').textContent = 'Service not found: install the TPK'; };
+    try {
+        tizen.application.launch(serviceAppId, () => { }, missing);
+    } catch (e) {
+        missing();
+    }
+}
+
+function tvIp() {
+    try {
+        return webapis.network.getIp();
+    } catch (e) {
+        return null;
+    }
+}
+
 function open() {
     client = new WebSocket(`ws://${deviceIP}:8086`);
     client.onopen = onOpen;
@@ -264,7 +315,7 @@ function compareVersions(a, b) {
     return 0;
 }
 
-// The service (TPK) and this page (TizenBrew module) are released together; say which one is behind.
+// The service (TPK) and this page (the app or the TizenBrew module) are released together; say which one is behind.
 // A service from minService up to this page's version works, so it is only shown, not flagged.
 function showVersions(native) {
     const element = document.getElementById('versions');
@@ -274,7 +325,7 @@ function showVersions(native) {
     element.textContent = native === uiVersion ? `v${uiVersion}`
         : native === null ? `Service older than ${minService}: install the latest TPK`
         : tooOld ? `Service ${native}, page ${uiVersion}: install the latest TPK`
-        : newer ? `Service ${native}, page ${uiVersion}: update the TizenBrew module`
+        : newer ? `Service ${native}, page ${uiVersion}: ${standalone ? 'install the latest app' : 'update the TizenBrew module'}`
         : `Page ${uiVersion}, service ${native}`;
 }
 
