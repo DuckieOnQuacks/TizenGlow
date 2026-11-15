@@ -6,7 +6,7 @@ TizenGlow lights WLED LEDs from what's on a Samsung Tizen TV's screen. It is bas
 
 TizenGlow has two parts, and both are needed:
 
-- **The TV service** (`io.gh.duckieonquacks.TizenGlow-<version>.tpk`): a background app with no screen of its own that captures the picture and sends it to WLED, plus **TizenGlow On/Off**, a small app for the home bar (see below).
+- **The TV service** (`io.gh.duckieonquacks.TizenGlow-<version>.tpk`): a background app with no screen of its own that captures the picture and sends it to WLED.
 - **The settings page** (TizenGlowUI): opened through [TizenBrew](https://github.com/reisxd/TizenBrew), which also starts the service.
 
 You need a Samsung TV with Tizen 6.5 or newer (2022+).
@@ -18,8 +18,6 @@ You need a Samsung TV with Tizen 6.5 or newer (2022+).
 5. Open the module. The top bar shows `v<version>` when the service and the page match. If it says which one to update instead, the other half is out of date: install the TPK from the same release, or re-add the module. A page-only release (its notes say so) also works with an older service; the top bar then shows both versions without a warning.
 
 **Starting with the TV:** TizenGlow's service is started by TizenBrew, so after a full restart of the TV (a power cut, a firmware update, or Samsung's occasional full reboot) nothing runs until something starts it. **Start with the TV** (under Capture, on by default) keeps a repeating system alarm pointed at the service: while the service runs it does nothing, and after a restart the next alarm starts it again, within 10 minutes (the shortest repeat Tizen allows), without opening TizenBrew. If the TV is in standby at that moment, capture waits until the screen comes on. Tizen's own start-at-boot flag has been ignored since Tizen 2.4, so this is the workaround. **Autostart** in the status says `on`, `off`, or why the TV refused the alarm. For an immediate start whenever you open TizenBrew, also set TizenGlow under TizenBrew's **Settings > Autolaunch Settings for services**. Services before 1.4.0 couldn't set the alarm (`not available: ... NotPermittedApp`): Tizen only lets an alarm start a service that declares a background category, which 1.4.0 does.
-
-**Switching the lights from the remote:** the TV only passes remote buttons to the app on screen, so TizenGlow can't listen for one while you watch something. The TPK therefore adds a second app, **TizenGlow On/Off**: find it in Apps and add it to the home bar. Opening it flips the lights: either capture on (the strip follows the screen again), or capture off and the strip switched off through WLED's JSON API, whatever **When the TV turns off** says. It has no screen of its own and closes at once. The choice is saved like **Capture enabled**, so it holds when the TV turns off and on again.
 
 Updating: install the new release's TPK. The page updates by itself (it can take a few hours to reach the TV because of CDN caching; pin `@v<version>` to get it immediately). Your settings are kept as long as the new TPK installs over the old one; if the TV makes you uninstall first (different signing certificate), enter them again.
 
@@ -112,7 +110,7 @@ TV capture -> 14 edge samples -> LED layout + interpolation -> DDP over UDP -> W
 
 WLED needs **Receive UDP realtime** on (Config > Sync Interfaces, on by default). If TizenGlow stops sending, WLED returns to its own effect after its realtime timeout (2.5 s by default).
 
-**When the TV turns off** (under WLED Direct): **Switch the strip off** (default) switches WLED off through its JSON API when the TV turns off while TizenGlow is driving the strip, instead of letting WLED fall back to its own effect. When the TV comes back on, capture lights the strip again, and the first frame also switches WLED back on, so it behaves as before once capture stops. **Leave it to WLED** keeps the old behaviour. With capture off, TizenGlow never touches WLED's power. Output state shows `switched off` while it is off (also after the On/Off app switched it off); a failure shows under Output error.
+**When the TV turns off** (under WLED Direct): **Switch the strip off** (default) switches WLED off through its JSON API when the TV turns off while TizenGlow is driving the strip, instead of letting WLED fall back to its own effect. When the TV comes back on, capture lights the strip again, and the first frame also switches WLED back on, so it behaves as before once capture stops. **Leave it to WLED** keeps the old behaviour. With capture off, TizenGlow never touches WLED's power. Output state shows `switched off` while it is off; a failure shows under Output error.
 
 ### LED mapping
 

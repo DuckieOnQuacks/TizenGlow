@@ -5,7 +5,6 @@ TizenGlow lights the LEDs behind a Samsung Tizen TV from what's on its screen. T
 - **WLED Direct:** drives a [WLED](https://kno.wled.ge/) controller over DDP, with an LED layout (counts per side, start corner, direction, LED shift), brightness, black threshold, saturation, gamma and smoothing that glides between frames.
 - **Capture modes and black bars:** Fast, Balanced and Detailed trade colour detail for frame rate (6 to 14 sample points; the TV's firmware sets the pace), and letterboxed films are detected so the top and bottom LEDs follow the picture, not the bars.
 - **Levels:** measures what the TV's capture returns for white and black and stretches every frame to match.
-- **On/Off from the remote:** a TizenGlow On/Off app for the home bar switches capture and the strip on or off.
 - **Calibration screen:** full-screen test patterns shown by the TV (solid colours, edges, corners, a moving marker, a rainbow) to check colours, orientation and alignment through the whole capture path.
 - **Live status:** capture and send FPS, frame timing, the detected capture API and errors, and a preview ring of the strip, on a settings page made for the remote.
 
@@ -23,7 +22,7 @@ Coming from HyperTizen: uninstall the HyperTizen app first. Both services use th
 
 TizenGlow is a modified version of [HyperTizen](https://github.com/reisxd/HyperTizen) by Reis Can (reisxd), as of December 2024 (commit `9e71bf2`). The screen capture through Samsung's `libvideoenhance`, the TizenBrew service and module structure, and the settings server come from HyperTizen.
 
-Changed by Joey Paschke from October 2026, renamed TizenGlow: WLED Direct output, the calibration screen, LED shift, runtime capture API detection, capture modes and statistics, the On/Off app, the redesigned settings page, HyperHDR output removed, the release workflow and many fixes. The git history records every change.
+Changed by Joey Paschke from October 2026, renamed TizenGlow: WLED Direct output, the calibration screen, LED shift, runtime capture API detection, capture modes and statistics, the redesigned settings page, HyperHDR output removed, the release workflow and many fixes. The git history records every change.
 
 Copyright (C) 2024 Reis Can
 Copyright (C) 2026 Joey Paschke

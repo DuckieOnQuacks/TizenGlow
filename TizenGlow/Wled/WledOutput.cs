@@ -274,8 +274,8 @@ namespace TizenGlow.Wled
             if (offWithTv) await SwitchOffAsync();
         }
 
-        /// <summary>Switches the strip off whatever "wledTvOff" says (the On/Off app). Capture must already be stopped.</summary>
-        public async Task SwitchOffAsync()
+        /// <summary>Switches the strip off. Capture must already be stopped.</summary>
+        private async Task SwitchOffAsync()
         {
             string host;
             lock (_lock)

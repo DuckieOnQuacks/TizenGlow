@@ -273,13 +273,6 @@ namespace TizenGlow
             for (int waited = 0; Volatile.Read(ref _loopRunning) == 1 && waited < 3000; waited += 20) await Task.Delay(20);
         }
 
-        /// <summary>The On/Off app's "off": capture off and the strip off.</summary>
-        public async Task SwitchOffAsync()
-        {
-            await HaltAsync();
-            await Wled.SwitchOffAsync();
-        }
-
         /// <summary>Display turned off: stop capturing and send one last frame.</summary>
         public async Task Stop()
         {
