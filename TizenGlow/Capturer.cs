@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Threading;
-using SkiaSharp;
 using Tizen.Applications;
 using Tizen.Applications.Notifications;
 using Tizen.System;
@@ -152,7 +150,7 @@ namespace TizenGlow
             SetState("error");
         }
 
-        /// <summary>captureState: idle, starting, running, stopped, no-server, unsupported or error.</summary>
+        /// <summary>captureState: idle, starting, running, stopped, no-server (no WLED target), unsupported or error.</summary>
         public static void SetState(string state)
         {
             if (state == _state) return; // the frame loop calls this every frame; only persist changes
@@ -247,55 +245,6 @@ namespace TizenGlow
                 }
             }
             return colorData;
-        }
-
-        /// <summary>
-        /// The HyperHDR frame: a 64x48 PNG whose border strips (4 rows top and bottom, 3 columns left and
-        /// right) show the nearest sample of that edge by position, so any point set and the moved-in rows
-        /// for black bars land in the right place. The middle is black.
-        /// </summary>
-        public static string ToImage(Color[] colors, PointSet points)
-        {
-            using (var image = new SKBitmap(64, 48))
-            {
-                var edgeColors = new SKColor[64];
-                for (int x = 0; x < 64; x++) edgeColors[x] = EdgeColor(colors, points, 0, (x + 0.5) / 64);
-                for (int x = 0; x < 64; x++) for (int y = 0; y < 4; y++) image.SetPixel(x, y, edgeColors[x]);
-                for (int x = 0; x < 64; x++) edgeColors[x] = EdgeColor(colors, points, 2, 1 - (x + 0.5) / 64); // bottom runs right to left
-                for (int x = 0; x < 64; x++) for (int y = 44; y < 48; y++) image.SetPixel(x, y, edgeColors[x]);
-                for (int y = 0; y < 48; y++)
-                {
-                    SKColor left = EdgeColor(colors, points, 3, 1 - (y + 0.5) / 48); // left runs bottom to top
-                    SKColor right = EdgeColor(colors, points, 1, (y + 0.5) / 48);
-                    for (int x = 0; x < 3; x++) image.SetPixel(x, y, left);
-                    for (int x = 61; x < 64; x++) image.SetPixel(x, y, right);
-                }
-
-                using (var memoryStream = new MemoryStream())
-                {
-                    using (var data = SKImage.FromBitmap(image).Encode(SKEncodedImageFormat.Png, 100))
-                    {
-                        data.SaveTo(memoryStream);
-                    }
-                    byte[] imageBytes = memoryStream.ToArray();
-                    string base64String = Convert.ToBase64String(imageBytes);
-                    return base64String;
-                }
-            }
-        }
-
-        private static SKColor EdgeColor(Color[] colors, PointSet points, int edge, double t)
-        {
-            int i = points.Nearest(edge, t);
-            return i < 0 || i >= colors.Length ? new SKColor(0, 0, 0) : ClampColor(colors[i]);
-        }
-
-        static SKColor ClampColor(Color color)
-        {
-            byte r = (byte)Math.Min(color.R, 255);
-            byte g = (byte)Math.Min(color.G, 255);
-            byte b = (byte)Math.Min(color.B, 255);
-            return new SKColor(r, g, b);
         }
     }
 

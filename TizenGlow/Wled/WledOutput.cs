@@ -21,7 +21,7 @@ namespace TizenGlow.Wled
     /// changes rebuild them. One lock covers the capture loop, the glide task, the test pattern task and
     /// config changes from the UI.
     /// </summary>
-    internal sealed class WledOutput : IFrameOutput
+    internal sealed class WledOutput
     {
         public const int TestLedCount = 2048;   // test frames before a layout is saved; WLED ignores pixels past its strip
         internal static int TestHoldMs = 10000; // test colours are resent until then: WLED drops realtime data after 2.5 s (default)
@@ -89,7 +89,6 @@ namespace TizenGlow.Wled
             _clock = clock;
         }
 
-        public string Label { get { return "WLED Direct"; } }
         public bool Configured { get { lock (_lock) return _host != null; } }
         public string Target { get { lock (_lock) return _host == null ? null : _host + ":" + _port; } }
         public LedLayout Layout { get { lock (_lock) return _layout; } }
@@ -104,7 +103,7 @@ namespace TizenGlow.Wled
                     double now = _clock();
                     if (_host == null) return "not configured";
                     if (_testActive) return "testing";
-                    if (_switchedOff) return "switched off with the TV";
+                    if (_switchedOff) return "switched off";
                     if (_lastSendFailed && now - _lastErrorAt < 5000) return "send error";
                     if (now - _lastSuccessAt < 2000) return "sending";
                     if (_layout == null) return "no LED layout";
@@ -263,24 +262,33 @@ namespace TizenGlow.Wled
         }
 
         /// <summary>
-        /// The TV turned off while TizenGlow drove the strip: switch it off with WLED's JSON API, ending realtime
+        /// The TV turned off while TizenGlow drove the strip: switch it off with WLED's JSON API (unless "wledTvOff" is "leave"), ending realtime
         /// at once ("live": false), instead of letting WLED fall back to its own effect after its 2.5 s timeout.
         /// WLED still shows realtime data while off, so frames light it again when the TV comes back; the first
         /// frame sent then also switches it back on, so it behaves as before once capture stops.
         /// </summary>
         public async Task TurnOffWithTvAsync()
         {
+            bool offWithTv;
+            lock (_lock) offWithTv = _offWithTv;
+            if (offWithTv) await SwitchOffAsync();
+        }
+
+        /// <summary>Switches the strip off whatever "wledTvOff" says (the On/Off app). Capture must already be stopped.</summary>
+        public async Task SwitchOffAsync()
+        {
             string host;
             lock (_lock)
             {
-                if (!_offWithTv || _host == null) return;
+                if (_host == null) return;
                 host = _host;
+                _hasTarget = false; // the glide task stops sending, or its next frame would light the strip again
             }
             string error = await PostStateAsync(host, "{\"on\":false,\"live\":false}");
             lock (_lock)
             {
                 if (error == null) _switchedOff = true;
-                else Fail(_clock(), "couldn't switch the strip off with the TV: " + error);
+                else Fail(_clock(), "couldn't switch the strip off: " + error);
             }
         }
 
@@ -357,21 +365,6 @@ namespace TizenGlow.Wled
             return true;
         }
 
-        public void Reset()
-        {
-            lock (_lock)
-            {
-                _framesSent = _packetsSent = _sendErrors = 0;
-                _lastSendMs = 0;
-                _lastError = null;
-                _lastSuccessAt = _lastErrorAt = double.NegativeInfinity;
-                _lastSendFailed = false;
-                _backoffUntil = 0;
-                _hasSmoothed = false;
-                _sendTimes.Clear();
-            }
-        }
-
         // ---- frames ----
 
         public void Prepare(Color[] samples, PointSet points)
@@ -392,7 +385,7 @@ namespace TizenGlow.Wled
 
                 for (int i = 0, o = 0; i < points.Count; i++, o += 3)
                 {
-                    // Same 8-bit clamp ToImage applies for HyperHDR.
+                    // Clamped to 8 bits: the capture can return up to 1023.
                     _samples[o] = Math.Min(255, Math.Max(0, samples[i].R));
                     _samples[o + 1] = Math.Min(255, Math.Max(0, samples[i].G));
                     _samples[o + 2] = Math.Min(255, Math.Max(0, samples[i].B));

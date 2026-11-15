@@ -58,8 +58,8 @@ namespace TizenGlow
         }
 
         /// <summary>
-        /// A frame that came back from the capture API. Times in ms; imageMs is the output's prepare step
-        /// (PNG for HyperHDR, LED mapping for WLED); frameMs is the whole iteration including the pacing wait.
+        /// A frame that came back from the capture API. Times in ms; imageMs is the prepare step
+        /// (mapping the samples onto the LEDs); frameMs is the whole iteration including the pacing wait.
         /// peak is the largest raw channel value among the samples (-1 if unknown).
         /// </summary>
         public void AddFrame(int epoch, double captureMs, double imageMs, double sendMs, double waitMs, double frameMs, bool sent, int peak = -1)
@@ -166,7 +166,7 @@ namespace TizenGlow
             public long droppedFrames;
             public double windowMs;
 
-            /// <summary>Largest raw sample channel value in the window (before levels). Over 255 means the capture API returns more than 8 bits (both outputs clamp at 255).</summary>
+            /// <summary>Largest raw sample channel value in the window (before levels). Over 255 means the capture API returns more than 8 bits (WledOutput clamps at 255).</summary>
             public int? peakSample;
 
             // The points a frame samples (the Capture mode, moved in for black bars) and what the firmware allows.
@@ -182,8 +182,7 @@ namespace TizenGlow
             public string autostart;
             public LevelsInfo levels;
 
-            // Active output, filled by HyperionClient / the output.
-            public string output;
+            // WLED, filled by CaptureLoop / WledOutput.
             public string outputTarget;
             public string outputState;
             public string outputError;

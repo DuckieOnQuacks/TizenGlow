@@ -1,14 +1,10 @@
-﻿using System.Collections.Generic;
-
-namespace TizenGlow.WebSocket.DataTypes
+﻿namespace TizenGlow.WebSocket.DataTypes
 {
     public enum Event
     {
         SetConfig,
         ReadConfig,
-        ReadConfigResult,
-        ScanSSDP,
-        SSDPScanResult
+        ReadConfigResult
     }
 
     public class BasicEvent
@@ -40,41 +36,5 @@ namespace TizenGlow.WebSocket.DataTypes
         public bool error { get; set; }
         public string key { get; set; }
         public object value { get; set; }
-    }
-
-    public class SSDPScanResultEvent : BasicEvent
-    {
-        public SSDPScanResultEvent(List<SSDPDevice> devices)
-        {
-            this.devices = devices;
-            this.Event = Event.SSDPScanResult;
-        }
-        public List<SSDPDevice> devices { get; set; }
-        public class SSDPDevice
-        {
-            public string FriendlyName { get; set; }
-            public string UrlBase { get; set; }
-
-            public SSDPDevice(string friendlyName, string urlBase)
-            {
-                FriendlyName = friendlyName;
-                UrlBase = urlBase;
-            }
-        }
-    }
-
-    public class ImageCommand
-    {
-        public ImageCommand(string image)
-        {
-            imagedata = image;
-        }
-
-        public string command { get; set; } = "image";
-        public string imagedata { get; set; }
-        public string name { get; set; } = "TizenGlow Data";
-        public string format { get; set; } = "auto";
-        public byte priority { get; set; } = 99;
-        public string origin { get; set; } = "TizenGlow";
     }
 }

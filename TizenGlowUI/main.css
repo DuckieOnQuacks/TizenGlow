@@ -132,17 +132,6 @@ h1 {
     font-size: calc(22 * var(--px));
 }
 
-/* Only the active output's settings and status rows are shown (and reachable with the D-pad). */
-body:not(.output-wled) .wledOnly, body.output-wled .hyperhdrOnly {
-    display: none !important;
-}
-
-#hyperhdrSection, #wledSection {
-    display: flex;
-    flex-direction: column;
-    gap: calc(24 * var(--px));
-}
-
 .pill.warn {
     background-color: #4a3206;
     border: 1px solid var(--warn);
@@ -289,28 +278,8 @@ button .active {
     left: calc(45 * var(--px));
 }
 
-#ssdpItems {
-    display: flex;
-    flex-direction: column;
-    gap: calc(12 * var(--px));
-}
-
-#ssdpItems:empty::before {
-    content: 'None found yet. Use Manual HyperHDR Server below.';
-    color: var(--dim);
-    font-size: calc(22 * var(--px));
-}
-
-.ssdpItem {
-    padding: calc(16 * var(--px)) calc(24 * var(--px));
-    background-color: var(--raised);
-    border: 3px solid transparent;
-    border-radius: calc(16 * var(--px));
-    font-size: calc(30 * var(--px));
-}
-
 /* One focus style everywhere: the remote has no pointer, so focus must always be obvious. */
-button:focus, .form input:focus, .toggle input:focus, .ssdpItem:focus {
+button:focus, .form input:focus, .toggle input:focus {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 calc(24 * var(--px)) rgba(255, 152, 0, 0.55);

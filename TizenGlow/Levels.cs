@@ -8,7 +8,7 @@ namespace TizenGlow
     /// Black and white points of the capture. The TV's capture doesn't necessarily return 0 for black and
     /// 255 for white (one S90D returns about 170 for white), which leaves the LEDs dim and dull. Measured
     /// from the calibration screen's Full White and Full Black, the samples are stretched so measured
-    /// white becomes 255,255,255 and measured black 0,0,0, per channel, before either output sees them.
+    /// white becomes 255,255,255 and measured black 0,0,0, per channel, before they are sent to WLED.
     /// </summary>
     public static class Levels
     {

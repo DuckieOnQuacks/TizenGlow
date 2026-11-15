@@ -1,13 +1,11 @@
 // This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.3.1';
+const uiVersion = '1.4.0';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
-const minService = '1.3.0'; // strip off with the TV
+const minService = '1.4.0'; // WLED only, the On/Off app
 
 let client;
 let deviceIP;
-const ssdpDevices = [];
-let canEnable = false;
 
 function open() {
     client = new WebSocket(`ws://${deviceIP}:8086`);
@@ -21,9 +19,7 @@ function open() {
 const events = {
     SetConfig: 0,
     ReadConfig: 1,
-    ReadConfigResult: 2,
-    ScanSSDP: 3,
-    SSDPScanResult: 4
+    ReadConfigResult: 2
 }
 
 function send(json) {
@@ -33,15 +29,13 @@ function send(json) {
 function onOpen() {
     document.getElementById('status').innerHTML = 'Connected';
     document.getElementById('enabled').onchange = (e) => {
-        if (outputSel.value === 'wled' ? !wledReady : !canEnable) {
-            alert(outputSel.value === 'wled' ? 'Please save a WLED target first' : 'Please select a device or set a manual server first');
+        if (!wledReady) {
+            alert('Please save a WLED target first');
             return e.target.checked = false;
         }
         send({ event: events.SetConfig, key: 'enabled', value: e.target.checked.toString() });
     }
-    send({ event: events.ReadConfig, key: 'rpcServer' });
     send({ event: events.ReadConfig, key: 'enabled' });
-    send({ event: events.ScanSSDP });
     send({ event: events.ReadConfig, key: 'captureMode' });
     send({ event: events.ReadConfig, key: 'targetFps' });
     send({ event: events.ReadConfig, key: 'nativeVersion' });
@@ -50,13 +44,10 @@ function onOpen() {
     for (const key of captureKeys) send({ event: events.ReadConfig, key });
     readCaptureStatus();
     // One timer each, however often this runs.
-    clearInterval(ssdpTimer);
     clearInterval(statusTimer);
-    ssdpTimer = setInterval(() => send({ event: events.ScanSSDP }), 10000);
     statusTimer = setInterval(readCaptureStatus, 1000);
 }
 
-let ssdpTimer = null;
 let statusTimer = null;
 
 function stepIn(list, current, step, wrap) {
@@ -69,7 +60,7 @@ function connected() {
     return client && client.readyState === WebSocket.OPEN;
 }
 
-// Must match HyperionClient.FpsPresets; the service ignores anything else.
+// Must match CaptureLoop.FpsPresets; the service ignores anything else.
 const fpsPresets = [10, 15, 20, 25, 30, 40];
 let targetFps = 25;
 
@@ -128,16 +119,7 @@ function makeSelector(id, values, initial, render, key, after) {
     return sel;
 }
 
-const options = (labels, value) => Object.keys(labels).map(k => k === value ? `<span class="active">${labels[k]}</span>` : labels[k]).join(' | ');
-
-// Output: HyperHDR (default, as before) or WLED Direct. Only the active one's settings are shown.
-const outputLabels = { hyperhdr: 'HyperHDR', wled: 'WLED Direct' };
-const outputSel = makeSelector('outputMode', Object.keys(outputLabels), 'hyperhdr', v => 'Output: ' + options(outputLabels, v), 'outputMode',
-    v => { document.body.className = 'output-' + v; });
-window.stepOutputMode = outputSel.step;
-function showOutputMode(mode) { outputSel.show(mode); }
-
-// WLED Direct picture settings, sent as soon as they change.
+// WLED picture settings, sent as soon as they change.
 const brightnessSel = makeSelector('wledBrightness', [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], 100, v => `Brightness: &lt; ${v}% &gt;`, 'wledBrightness');
 const thresholdSel = makeSelector('wledBlackThreshold', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0, v => `Black threshold: &lt; ${v}% &gt;`, 'wledBlackThreshold');
 const smoothingSel = makeSelector('wledSmoothing', ['on', 'off'], 'on', v => `Smoothing: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'wledSmoothing');
@@ -153,7 +135,7 @@ window.stepSmoothing = smoothingSel.step;
 window.stepSaturation = saturationSel.step;
 window.stepGamma = gammaSel.step;
 
-// Capture-side settings (both outputs): black bars and levels.
+// Capture-side settings: black bars, levels and starting with the TV.
 const letterboxLabels = { off: 'Off', auto: 'Auto', on: 'Always' };
 const letterboxSel = makeSelector('letterbox', Object.keys(letterboxLabels), 'auto', v => `Black bars: &lt; ${letterboxLabels[v]} &gt;`, 'letterbox');
 const levelsSel = makeSelector('levels', ['on', 'off'], 'on', v => `Levels: &lt; ${v === 'on' ? 'On' : 'Off'} &gt;`, 'levels');
@@ -195,7 +177,7 @@ const directionSel = makeSelector('ledDirection', Object.keys(directionLabels), 
 window.stepLedStart = cornerSel.step;
 window.stepLedDirection = directionSel.step;
 
-const wledKeys = ['outputMode', 'wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift', 'wledSaturation', 'wledGamma', 'wledTvOff'];
+const wledKeys = ['wledTarget', 'ledLayout', 'wledBrightness', 'wledBlackThreshold', 'wledSmoothing', 'ledShift', 'wledSaturation', 'wledGamma', 'wledTvOff'];
 const ledSides = ['ledTop', 'ledRight', 'ledBottom', 'ledLeft'];
 let wledReady = false;
 
@@ -354,7 +336,7 @@ const captureStatusKeys = ['captureState', 'detectedApi', 'detectedPlatformVersi
 function readCaptureStatus() {
     for (const key of captureStatusKeys) send({ event: events.ReadConfig, key });
     send({ event: events.ReadConfig, key: 'captureStats' });
-    if (outputSel.value === 'wled') send({ event: events.ReadConfig, key: 'ledPreview' });
+    send({ event: events.ReadConfig, key: 'ledPreview' });
 }
 
 // The latest captureStats, for the calibration screen (sample points, levels results).
@@ -392,9 +374,8 @@ function showCaptureStats(msg) {
     setText('statBreakdown', !s || s.averageFrameMs === null ? '-'
         : `capture ${num(s.averageCaptureMs)} + prepare ${num(s.averageImageMs)} + send ${num(s.averageSendMs)} + wait ${num(s.averageWaitMs)} ms`);
 
-    // Output (native 1.0.4+). The WLED rows are only shown in WLED Direct mode.
+    // WLED (native 1.0.4+).
     const has = v => s && v !== null && v !== undefined;
-    setText('statOutput', has(s && s.output) ? s.output : '-');
     setText('statOutputState', has(s && s.outputState) ? s.outputState : '-');
     setText('statOutputTarget', has(s && s.outputTarget) ? s.outputTarget : '-');
     setText('statPeak', !has(s && s.peakSample) ? '-' : s.peakSample > 255 ? `${s.peakSample} (above 8-bit, clipped at 255)` : String(s.peakSample));
@@ -469,10 +450,7 @@ function onMessage(data) {
     const msg = JSON.parse(data.data);
     switch(msg.Event) {
         case events.ReadConfigResult:
-            if(msg.key === 'rpcServer' && !msg.error) {
-                canEnable = true;
-                showRPC(msg.value);
-            } else if(msg.key === 'enabled' && !msg.error) {
+            if (msg.key === 'enabled' && !msg.error) {
                 document.getElementById('enabled').checked = msg.value === 'true';
             } else if (msg.key === 'targetFps') {
                 showTargetFps(msg.error ? 25 : Number(msg.value));
@@ -480,8 +458,6 @@ function onMessage(data) {
                 showCaptureMode(msg.error ? 'balanced' : msg.value);
             } else if (msg.key === 'nativeVersion') {
                 showVersions(msg.error ? null : String(msg.value));
-            } else if (msg.key === 'outputMode') {
-                showOutputMode(msg.error ? 'hyperhdr' : msg.value);
             } else if (msg.key === 'wledTarget') {
                 if (!msg.error) showWledTarget(msg.value);
             } else if (msg.key === 'ledLayout') {
@@ -516,71 +492,5 @@ function onMessage(data) {
                 showCaptureStatus(msg);
             }
             break;
-        case events.SSDPScanResult: {
-            for (const device of msg.devices || []) {
-                // Any device on the network can answer the search, so its name and address are untrusted:
-                // the address must be a plain ws(s)://host[:port][/], and both go in as text, never as HTML.
-                const base = String(device.UrlBase || '');
-                const url = /^https:/i.test(base) ? 'wss' + base.slice(5) : /^http:/i.test(base) ? 'ws' + base.slice(4) : '';
-                if (!/^wss?:\/\/([a-z0-9.-]+|\[[0-9a-f:.]+\])(:\d{1,5})?\/?$/i.test(url) || ssdpDevices.some(d => d.url === url)) continue;
-
-                const friendlyName = String(device.FriendlyName || url).slice(0, 60);
-                const item = document.createElement('div');
-                item.className = 'ssdpItem';
-                item.tabIndex = 0;
-                item.setAttribute('data-uri', url);
-                item.onclick = () => setRPC(url);
-                const label = document.createElement('a');
-                label.textContent = friendlyName;
-                item.appendChild(label);
-                document.getElementById('ssdpItems').appendChild(item);
-                ssdpDevices.push({ url, friendlyName });
-            }
-        }
     }
-}
-
-window.setRPC = (url) =>  {
-    canEnable = true;
-    send({ event: events.SetConfig, key: 'rpcServer', value: url });
-    showRPC(url);
-}
-
-// Shows the saved server and mirrors it into the manual host/port fields.
-function showRPC(url) {
-    document.getElementById('currentServer').innerText = `Currently Connected to ${url}`;
-    const parsed = parseRPC(url);
-    if (parsed) {
-        document.getElementById('manualHost').value = parsed.host;
-        document.getElementById('manualPort').value = parsed.port;
-    }
-}
-
-// 'ws://host:port' / 'wss://host' -> { host, port }, or null if it doesn't look like one.
-function parseRPC(url) {
-    const match = /^(wss?):\/\/(\[[0-9a-f:.]+\]|[^\/:?#\s]+)(?::(\d+))?/i.exec(url || '');
-    if (!match) return null;
-    return { host: match[2], port: match[3] || (match[1].toLowerCase() === 'wss' ? '443' : '80') };
-}
-
-// Returns { url } or { error }.
-function buildRPC(host, port) {
-    host = String(host).trim();
-    port = String(port).trim();
-    if (!host) return { error: 'Invalid host: enter the HyperHDR IP address or hostname' };
-    if (!/^([a-z0-9.-]+|\[[0-9a-f:.]+\])$/i.test(host)) return { error: `Invalid host: "${host}" (enter only an IP or hostname, no ws:// or port)` };
-    if (!/^\d+$/.test(port) || +port < 1 || +port > 65535) return { error: 'Invalid port: enter a number from 1 to 65535' };
-    return { url: `ws://${host}:${+port}` };
-}
-
-window.useManualServer = () => {
-    const status = document.getElementById('manualStatus');
-    const result = buildRPC(document.getElementById('manualHost').value, document.getElementById('manualPort').value);
-    if (!result.error && (!client || client.readyState !== WebSocket.OPEN)) {
-        result.error = 'Not connected to the TizenGlow service yet, try again in a moment';
-    }
-    status.className = result.error ? 'error' : '';
-    if (result.error) return status.innerText = result.error;
-    setRPC(result.url);
-    status.innerText = `Manual server saved: ${result.url}`;
 }

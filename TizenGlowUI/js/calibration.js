@@ -1,6 +1,5 @@
 // Calibration screen: full-screen test patterns shown by the TV itself. The running capture sees them like
-// any other picture, so they test the whole path: screen -> Samsung capture -> TizenGlow -> WLED Direct /
-// HyperHDR -> LEDs. Nothing is sent from here except the LED shift (UP / DOWN on still patterns); Test WLED
+// any other picture, so they test the whole path: screen -> Samsung capture -> TizenGlow -> WLED -> LEDs. Nothing is sent from here except the LED shift (UP / DOWN on still patterns); Test WLED
 // stays the network-only test.
 //
 // Every pattern is a few rectangles in screen fractions with exact CSS colours or gradients (no canvas,
@@ -201,7 +200,6 @@ const calibration = (() => {
     }
 
     const read = id => { const el = document.getElementById(id); return el ? el.textContent : '-'; };
-    const wled = () => typeof outputSel !== 'undefined' && outputSel.value === 'wled';
 
     function showText() {
         if (wizard) return showWizardText();
@@ -215,10 +213,9 @@ const calibration = (() => {
         const shift = typeof ledShift === 'undefined' || ledShift === 0 ? '' : `, LED shift ${ledShift > 0 ? '+' : ''}${ledShift}`;
         const points = typeof lastStats !== 'undefined' && lastStats && lastStats.points ? `${lastStats.points} points, ` : '';
         setLine(statsLine, `Capture ${read('detectedApi')}, ${points}${read('statCaptureFps')} fps captured, ${read('statSendFps')} fps sent. `
-            + `Output ${wled() ? `WLED Direct${/^\d+$/.test(count) ? `, ${count} LEDs` : count === '-' ? '' : `, ${count}`}${shift}` : 'HyperHDR'}`);
+            + `WLED${/^\d+$/.test(count) ? `, ${count} LEDs` : count === '-' ? '' : `, ${count}`}${shift}`);
         setLine(keysLine, p.animated ? 'LEFT / RIGHT pattern    OK pause    UP / DOWN speed    BACK exit'
-            : wled() ? 'LEFT / RIGHT pattern    UP / DOWN shift LEDs    OK hide info    BACK exit'
-            : 'LEFT / RIGHT pattern    OK hide info    BACK exit');
+            : 'LEFT / RIGHT pattern    UP / DOWN shift LEDs    OK hide info    BACK exit');
     }
 
     function setLine(el, text) { if (el.textContent !== text) el.textContent = text; }
@@ -376,8 +373,8 @@ const calibration = (() => {
         else if (key === 'ok' && !p.animated) return infoBox.style.display === 'none' ? showInfo() : hideInfo();
         else if (key === 'ok') togglePause();
         else if ((key === 'up' || key === 'down') && p.animated) speed(key === 'up' ? -1 : 1);
-        // Still patterns, WLED Direct: move the LEDs one step clockwise (UP) or counter-clockwise (DOWN).
-        else if ((key === 'up' || key === 'down') && wled() && window.stepLedShift) window.stepLedShift(key === 'up' ? 1 : -1);
+        // Still patterns: move the LEDs one step clockwise (UP) or counter-clockwise (DOWN).
+        else if ((key === 'up' || key === 'down') && window.stepLedShift) window.stepLedShift(key === 'up' ? 1 : -1);
         showInfo();
     }, true);
 

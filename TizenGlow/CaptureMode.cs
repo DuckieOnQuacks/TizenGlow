@@ -4,8 +4,7 @@ namespace TizenGlow
     /// User-facing capture presets. The main choice is how many points a frame samples: the firmware reads
     /// ScreenCapturePoints per round and waits SleepMS after each, so a frame takes rounds x wait (on an
     /// S90D: 2 per round, 20 ms, so 6 points is 60 ms and 14 points 140 ms). Fewer points means faster,
-    /// lower-latency frames and coarser colour along each edge. Colour smoothing applies only to WLED
-    /// Direct; HyperHDR smooths its own.
+    /// lower-latency frames and coarser colour along each edge.
     /// </summary>
     public sealed class CaptureMode
     {
@@ -33,8 +32,8 @@ namespace TizenGlow
         public int ConditionRetryMs;
 
         /// <summary>
-        /// WLED Direct smoothing time constant when its Smoothing setting is on (time to cover ~63% of a
-        /// colour change). HyperHDR output is never smoothed here; HyperHDR does its own.
+        /// WLED smoothing time constant when its Smoothing setting is on (time to cover ~63% of a
+        /// colour change).
         /// </summary>
         public int SmoothingMs;
 

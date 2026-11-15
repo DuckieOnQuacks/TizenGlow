@@ -6,13 +6,12 @@ using System.Globalization;
 using System.Reflection;
 using System.Threading;
 
-namespace TizenGlow.WebSocket
+namespace TizenGlow
 {
     /// <summary>
-    /// Owns the single capture loop. Each frame is captured once and handed to the active output:
-    /// HyperHDR (HyperHdrOutput) or WLED Direct (WledOutput).
+    /// Owns the single capture loop. Each frame is captured once and sent to WLED (WledOutput).
     /// </summary>
-    internal class HyperionClient
+    internal class CaptureLoop
     {
         private int _loopRunning;
 
@@ -29,13 +28,13 @@ namespace TizenGlow.WebSocket
 
         private static string ReadServiceVersion()
         {
-            var attr = typeof(HyperionClient).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+            var attr = typeof(CaptureLoop).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>();
             string version = attr != null ? attr.InformationalVersion : "unknown";
             int plus = version.IndexOf('+'); // the SDK appends "+<commit>"
             return plus >= 0 ? version.Substring(0, plus) : version;
         }
 
-        /// <summary>Live performance numbers; reset when capture starts and when the mode, target FPS or output changes.</summary>
+        /// <summary>Live performance numbers; reset when capture starts and when the mode or target FPS changes.</summary>
         public static readonly CaptureStats Stats = new CaptureStats();
 
         /// <summary>Failed frames in a row before the capture settings are read again.</summary>
@@ -68,20 +67,14 @@ namespace TizenGlow.WebSocket
             return true;
         }
 
-        public readonly HyperHdrOutput HyperHdr;
         public readonly WledOutput Wled;
-        private volatile IFrameOutput _output;
 
-        /// <summary>Stored as "outputMode": "hyperhdr" (default, so upgrades keep their behaviour) or "wled".</summary>
-        public string OutputName { get { return _output == Wled ? "wled" : "hyperhdr"; } }
-
-        public HyperionClient()
+        public CaptureLoop()
         {
             // Mode first: it sets its own target FPS, which a saved targetFps then fine-tunes.
             if (Preference.Contains("captureMode")) TrySetMode(Preference.Get<string>("captureMode"));
             if (Preference.Contains("targetFps")) TrySetTargetFps(Preference.Get<string>("targetFps"));
 
-            HyperHdr = new HyperHdrOutput(Preference.Contains("rpcServer") ? Preference.Get<string>("rpcServer") : null);
             Wled = new WledOutput(() => _mode.SmoothingMs);
             if (Preference.Contains("wledTarget")) Wled.TrySetTarget(Preference.Get<string>("wledTarget"));
             if (Preference.Contains("ledShift")) Wled.TrySetShift(Preference.Get<string>("ledShift"));
@@ -97,41 +90,18 @@ namespace TizenGlow.WebSocket
             if (Preference.Contains("levels")) Levels.TrySetEnabled(Preference.Get<string>("levels"));
             if (Preference.Contains("levelsWhite")) Levels.TrySetWhite(Preference.Get<string>("levelsWhite"));
             if (Preference.Contains("levelsBlack")) Levels.TrySetBlack(Preference.Get<string>("levelsBlack"));
-            _output = Preference.Contains("outputMode") && Preference.Get<string>("outputMode") == "wled" ? (IFrameOutput)Wled : HyperHdr;
 
             Task.Run(() => Start());
-        }
-
-        public void UpdateURI(string uri)
-        {
-            HyperHdr.UpdateUri(uri);
-
-            // A loop that exited with "no-server" (nothing saved yet) needs starting now.
-            if (App.Configuration.Enabled) Task.Run(() => Start());
-        }
-
-        /// <summary>Picks the output for the next frame; the running loop keeps going. Counters start over.</summary>
-        public bool TrySetOutput(string name)
-        {
-            IFrameOutput output = name == "wled" ? (IFrameOutput)Wled : name == "hyperhdr" ? HyperHdr : null;
-            if (output == null) return false;
-            output.Reset();
-            _output = output;
-            Stats.Reset();
-            if (App.Configuration.Enabled) Task.Run(() => Start());
-            return true;
         }
 
         public CaptureStats.Snapshot ReadStats()
         {
             CaptureStats.Snapshot s = Stats.Read(_targetFps);
-            IFrameOutput output = _output;
             s.mode = _mode.Label;
             s.resolution = Capturer.Resolution;
-            s.output = output.Label;
-            s.outputTarget = output.Target;
-            s.outputState = output.State;
-            if (output == Wled) Wled.Describe(s);
+            s.outputTarget = Wled.Target;
+            s.outputState = Wled.State;
+            Wled.Describe(s);
 
             PointSet points = Letterbox.Inset ? _mode.BarsPoints : _mode.Points;
             Condition condition = Capturer.CurrentCondition;
@@ -150,8 +120,8 @@ namespace TizenGlow.WebSocket
 
         public async Task Start()
         {
-            // Exactly one capture loop. The display handler, UpdateURI, the output switch and the
-            // UI's "enabled" all call Start, and stacked loops would fight over the capture API.
+            // Exactly one capture loop. The display handler, saving a WLED target and the UI's
+            // "enabled" all call Start, and stacked loops would fight over the capture API.
             if (Interlocked.Exchange(ref _loopRunning, 1) == 1) return;
             try { await RunAsync(); }
             catch (Exception e) { Capturer.ReportError("capture loop", e); }
@@ -161,7 +131,7 @@ namespace TizenGlow.WebSocket
         private async Task RunAsync()
         {
             if (!App.Configuration.Enabled) return;
-            if (!_output.Configured)
+            if (!Wled.Configured)
             {
                 Capturer.SetState("no-server");
                 return;
@@ -178,7 +148,6 @@ namespace TizenGlow.WebSocket
             {
                 int epoch = Stats.Epoch;
                 CaptureMode mode = _mode;
-                IFrameOutput output = _output;
                 double start = Stats.Now(), captured, prepared;
                 int peak = 0;
                 try
@@ -192,7 +161,7 @@ namespace TizenGlow.WebSocket
                     Levels.Observe(colors, captured);
                     points = Letterbox.AfterCapture(colors, points, probe, mode, captured);
                     Levels.Apply(colors);
-                    output.Prepare(colors, points);
+                    Wled.Prepare(colors, points);
                     prepared = Stats.Now();
                 }
                 catch (Exception e)
@@ -236,7 +205,7 @@ namespace TizenGlow.WebSocket
 
                 // Only a frame that actually came back from the capture API counts as running.
                 Capturer.SetState("running");
-                bool sent = await output.SendAsync();
+                bool sent = await Wled.SendAsync();
                 double worked = Stats.Now();
 
                 // Pace against a deadline instead of sleeping a fixed time: capture, prepare and send
@@ -290,24 +259,40 @@ namespace TizenGlow.WebSocket
             return true;
         }
 
-        /// <summary>Display turned off: stop capturing and send one last frame through the active output.</summary>
+        /// <summary>
+        /// Capture off, and waits (briefly) for the loop to finish its frame, so none of its frames lands after
+        /// what the caller sends next. A frame sent after the strip was switched off would switch it back on.
+        /// </summary>
+        private async Task HaltAsync()
+        {
+            App.Configuration.Enabled = false;
+            for (int waited = 0; Volatile.Read(ref _loopRunning) == 1 && waited < 3000; waited += 20) await Task.Delay(20);
+        }
+
+        /// <summary>The On/Off app's "off": capture off and the strip off.</summary>
+        public async Task SwitchOffAsync()
+        {
+            await HaltAsync();
+            await Wled.SwitchOffAsync();
+        }
+
+        /// <summary>Display turned off: stop capturing and send one last frame.</summary>
         public async Task Stop()
         {
             bool wasCapturing = App.Configuration.Enabled;
-            if (App.Configuration.Enabled) App.Configuration.Enabled = false;
-            IFrameOutput output = _output;
+            await HaltAsync();
             try
             {
                 PointSet points = Letterbox.Inset ? _mode.BarsPoints : _mode.Points;
                 Capturer.SetCapturePoints(points.Points);
                 Color[] colors = Capturer.GetColors();
                 Levels.Apply(colors);
-                output.Prepare(colors, points);
-                await output.SendAsync();
+                Wled.Prepare(colors, points);
+                await Wled.SendAsync();
             }
             catch (Exception) { } // capture may not answer while the panel turns off
             // Only a strip TizenGlow was driving: with capture off, WLED's own effect is left alone.
-            if (wasCapturing && output == Wled) await Wled.TurnOffWithTvAsync();
+            if (wasCapturing) await Wled.TurnOffWithTvAsync();
         }
     }
 }

@@ -82,19 +82,6 @@ namespace TizenGlow
             }
         }
 
-        /// <summary>Index of the point on `edge` nearest to position t (0..1) along it, or -1 when the edge has none.</summary>
-        public int Nearest(int edge, double t)
-        {
-            int best = -1;
-            double bestDistance = double.MaxValue;
-            foreach (int i in Edges[edge])
-            {
-                double d = Math.Abs(Along(edge, Points[i]) - t);
-                if (d < bestDistance) { bestDistance = d; best = i; }
-            }
-            return best;
-        }
-
         /// <summary>Frames per second the firmware allows for this many points: rounds of `perRound` points, `sleepMs` each. Null when it reports no wait.</summary>
         public double? CeilingFps(int perRound, int sleepMs)
         {
