@@ -282,7 +282,11 @@ namespace TizenGlow.Wled
             {
                 if (_host == null) return;
                 host = _host;
-                _hasTarget = false; // the glide task stops sending, or its next frame would light the strip again
+                // Nothing may send after this, or its frame would light the strip again: the glide task stops,
+                // and a running Test WLED pattern ends.
+                _hasTarget = false;
+                _test?.Cancel();
+                _testActive = false;
             }
             string error = await PostStateAsync(host, "{\"on\":false,\"live\":false}");
             lock (_lock)

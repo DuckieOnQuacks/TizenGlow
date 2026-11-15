@@ -203,6 +203,10 @@ namespace TizenGlow
                     Capturer.RefreshCondition(out changed);
                 }
 
+                // Switched off while this frame was captured (a slow capture can outlast HaltAsync's wait):
+                // drop it, since a frame sent after the strip went off would switch it back on.
+                if (!App.Configuration.Enabled) break;
+
                 // Only a frame that actually came back from the capture API counts as running.
                 Capturer.SetState("running");
                 bool sent = await Wled.SendAsync();
