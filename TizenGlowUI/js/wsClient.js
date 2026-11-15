@@ -1,5 +1,5 @@
-// This page's version. Must equal tizen-manifest.xml and package.json; the release workflow checks.
-const uiVersion = '1.4.1';
+// This page's version. Must equal tizen-manifest.xml, package.json and config.xml; the release workflow checks.
+const uiVersion = '1.5.0';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
 const minService = '1.4.0'; // WLED only

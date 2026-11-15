@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://yourdomain/Template01" version="0.2.1" viewmodes="maximized">
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="https://github.com/DuckieOnQuacks/TizenGlow" version="1.5.0" viewmodes="maximized">
 	<tizen:application id="Sj1Em5JlZW.TizenGlowUI" package="Sj1Em5JlZW" required_version="6.0"/>
 	<name>TizenGlow</name>
 	<icon src="icon.png"/>
@@ -7,6 +7,7 @@
 	<tizen:privilege name="http://tizen.org/privilege/internet" />
 	<tizen:privilege name="http://developer.samsung.com/privilege/network.public" />
 	<content src="index.html"/>
+	<access origin="*" subdomains="true"/>
 	<feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
 	<tizen:metadata key="http://samsung.com/tv/metadata/prelaunch.support" value="true"/>
 	<tizen:profile name="tv"/>
