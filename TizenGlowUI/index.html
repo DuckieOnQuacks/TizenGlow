@@ -181,7 +181,7 @@
         Array.prototype.forEach.call(document.querySelectorAll('input'), input => {
             if (!isField(input)) return;
             input.readOnly = true;
-            input.addEventListener('blur', () => { input.readOnly = true; });
+            input.addEventListener('blur', () => { input.readOnly = true; editEnded(); });
         });
         const edit = input => {
             input.blur();           // read-only again for a moment
@@ -190,6 +190,7 @@
         };
         const stopEditing = input => {
             input.readOnly = true;  // set here too: blur events don't fire everywhere
+            editEnded();
             input.blur();           // closes the keyboard
             input.focus({ preventScroll: true }); // stay on it, so UP / DOWN carry on from here
         };
@@ -225,8 +226,9 @@
                 if (isField(document.activeElement)) stopEditing(document.activeElement);
             } else if (e.keyCode === 10009 && standalone) {
                 // Back in the installed app (under TizenBrew it belongs to TizenBrew): end typing, or close the app.
-                if (isField(document.activeElement) && !document.activeElement.readOnly) stopEditing(document.activeElement);
-                else tizen.application.getCurrentApplication().exit();
+                const typing = isField(document.activeElement) && !document.activeElement.readOnly;
+                if (typing) stopEditing(document.activeElement);
+                else if (backCloses(typing)) tizen.application.getCurrentApplication().exit();
             }
         });
 

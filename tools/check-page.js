@@ -37,10 +37,14 @@ function page(protocol, options = {}) {
         fetch: url => { log.fetches.push(url); return Promise.resolve({ text: () => Promise.resolve(tvAddress) }); },
         tizen: {
             application: {
+                getAppInfo(id) {
+                    if (options.notInstalled) throw { name: 'NotFoundError', message: 'no such app' };
+                    return { id };
+                },
                 launch(id, ok, failed) {
                     log.launches.push(id);
-                    if (options.launchThrows) throw new Error('no such app');
-                    if (options.launchFails) failed({ message: 'not found' });
+                    if (options.launchThrows) throw { name: 'SecurityError', message: 'not allowed' };
+                    if (options.launchFails) failed({ name: 'SecurityError', message: 'not allowed' });
                 },
             },
         },
@@ -128,11 +132,40 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
         assert.strictEqual(p.log.sockets[2].url, 'ws://127.0.0.1:8086');
     }
 
-    // Installed app, the service's TPK isn't installed: it says so.
-    for (const how of ['launchFails', 'launchThrows']) {
-        const p = page('file:', { [how]: true });
+    // Installed app, the service can't be started: it says why, and blames a missing TPK only when it is missing.
+    {
+        const missing = page('file:', { notInstalled: true });
+        missing.ctx.startPage();
+        assert.strictEqual(missing.element('status').textContent, 'Service not found: install the TPK');
+        assert.strictEqual(missing.log.launches.length, 0);
+
+        for (const how of ['launchFails', 'launchThrows']) {
+            const p = page('file:', { [how]: true });
+            p.ctx.startPage();
+            assert.strictEqual(p.element('status').textContent, "Couldn't start the service: SecurityError: not allowed", how);
+        }
+    }
+
+    // Whatever the TV's web runtime calls its own scheme, anything but http(s) is the installed app.
+    {
+        const p = page('app:');
         p.ctx.startPage();
-        assert.strictEqual(p.element('status').textContent, 'Service not found: install the TPK', how);
+        assert.deepStrictEqual(p.log.launches, [serviceAppId]);
+        assert.strictEqual(p.log.fetches.length, 0);
+    }
+
+    // Back in the installed app closes it, except while typing or just after typing ended: closing the TV
+    // keyboard with Back can be followed by a second Back, which must not close the app.
+    {
+        const p = page('file:');
+        let now = 1000000;
+        p.ctx.Date = { now: () => now };
+        assert.strictEqual(p.ctx.backCloses(true), false, 'while typing');
+        assert.strictEqual(p.ctx.backCloses(false), true);
+        p.ctx.editEnded();
+        assert.strictEqual(p.ctx.backCloses(false), false, 'just after typing ended');
+        now += 501;
+        assert.strictEqual(p.ctx.backCloses(false), true, 'half a second later');
     }
 
     // TizenBrew module: as before. The address comes from TizenBrew, which also starts the service.

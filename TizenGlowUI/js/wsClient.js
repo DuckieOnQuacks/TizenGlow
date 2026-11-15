@@ -7,8 +7,10 @@ const minService = '1.4.0'; // WLED only
 let client;
 let deviceIP;
 
-// The installed app (TizenGlow-<version>.wgt) loads this page from file:, the TizenBrew module over HTTP.
-const standalone = location.protocol === 'file:';
+// The TizenBrew module loads this page over HTTP(S); the installed app (TizenGlow-<version>.wgt) loads it
+// from the TV's own storage (file:). Anything that isn't HTTP counts as the app, so an unexpected scheme
+// still starts the service.
+const standalone = !/^https?:$/.test(location.protocol);
 const serviceAppId = 'io.gh.duckieonquacks.TizenGlow';
 
 // Finds the service and connects. TizenBrew starts the service and knows the TV's address; the installed
@@ -42,13 +44,25 @@ function tryHosts(hosts) {
 
 // What TizenBrew's js/service.js does for the module. Launching a service that already runs is harmless.
 function launchService() {
-    const missing = () => { document.getElementById('status').textContent = 'Service not found: install the TPK'; };
+    const status = text => { document.getElementById('status').textContent = text; };
+    const failed = e => status(`Couldn't start the service: ${e && e.name}: ${e && e.message}`);
     try {
-        tizen.application.launch(serviceAppId, () => { }, missing);
+        tizen.application.getAppInfo(serviceAppId);
     } catch (e) {
-        missing();
+        return status('Service not found: install the TPK');
+    }
+    try {
+        tizen.application.launch(serviceAppId, () => { }, failed);
+    } catch (e) {
+        failed(e);
     }
 }
+
+// Back in the installed app closes it, but not while typing, and not just after typing ended: closing the
+// TV keyboard with Back arrives as Cancel, and a Back that follows it must not close the app.
+let editEndedAt = 0;
+function editEnded() { editEndedAt = Date.now(); }
+function backCloses(typing) { return !typing && Date.now() - editEndedAt > 500; }
 
 function tvIp() {
     try {
