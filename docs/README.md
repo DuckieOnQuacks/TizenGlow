@@ -7,19 +7,19 @@ TizenGlow lights WLED LEDs from what's on a Samsung Tizen TV's screen. It is bas
 TizenGlow has two parts, and both are needed:
 
 - **The TV service** (`io.gh.duckieonquacks.TizenGlow-<version>.tpk`): a background app with no screen of its own that captures the picture and sends it to WLED.
-- **The settings page** (TizenGlowUI): opened through [TizenBrew](https://github.com/reisxd/TizenBrew), which also starts the service.
+- **The settings page**, either as **the TizenGlow app** (`TizenGlow-<version>.wgt`), which opens from its own icon and starts the service, or as a module in [TizenBrew](https://github.com/reisxd/TizenBrew).
 
 You need a Samsung TV with Tizen 6.5 or newer (2022+).
 
-1. Download the TPK from the [latest release](https://github.com/DuckieOnQuacks/TizenGlow/releases/latest). The release notes list its SHA-256.
-2. The TPK is signed only with the Tizen SDK's test certificates, so sign it with your own Samsung certificate and install it. TizenBrew Installer does both; with Tizen Studio see [Resigning the package](#resigning-the-package) and then run `tizen install -n io.gh.duckieonquacks.TizenGlow-<version>.tpk`.
-3. Install TizenBrew on the TV if you haven't ([guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)).
-4. In TizenBrew's module manager ([GREEN] button) add the GitHub module `duckieonquacks/tizenglow`. Without a version it always loads the newest release; add `@v<version>` (for example `duckieonquacks/tizenglow@v1.0.0`) to stay on one release.
-5. Open the module. The top bar shows `v<version>` when the service and the page match. If it says which one to update instead, the other half is out of date: install the TPK from the same release, or re-add the module. A page-only release (its notes say so) also works with an older service; the top bar then shows both versions without a warning.
+1. Download the TPK and the WGT from the [latest release](https://github.com/DuckieOnQuacks/TizenGlow/releases/latest). The release notes list their SHA-256.
+2. Sign both with your own Samsung certificate and install them: the TPK carries only the Tizen SDK's test certificates, and the app is unsigned. TizenBrew Installer does both; with Tizen Studio see [Resigning the package](#resigning-the-package) and then run `tizen install -n <file>` for each.
+3. Open **TizenGlow** from Apps, and add it to the home bar to keep it one press away. It starts the service and shows the settings; Back closes it, and the service keeps running. The top bar shows `v<version>` when the service and the page match. If it says which one to update instead, the other half is out of date: install that file from the same release. A page-only release (its notes say so) also works with an older service; the top bar then shows both versions without a warning.
 
-**Starting with the TV:** TizenGlow's service is started by TizenBrew, so after a full restart of the TV (a power cut, a firmware update, or Samsung's occasional full reboot) nothing runs until something starts it. **Start with the TV** (under Capture, on by default) keeps a repeating system alarm pointed at the service: while the service runs it does nothing, and after a restart the next alarm starts it again, within 10 minutes (the shortest repeat Tizen allows), without opening TizenBrew. If the TV is in standby at that moment, capture waits until the screen comes on. Tizen's own start-at-boot flag has been ignored since Tizen 2.4, so this is the workaround. **Autostart** in the status says `on`, `off`, or why the TV refused the alarm. For an immediate start whenever you open TizenBrew, also set TizenGlow under TizenBrew's **Settings > Autolaunch Settings for services**. Services before 1.4.0 couldn't set the alarm (`not available: ... NotPermittedApp`): Tizen only lets an alarm start a service that declares a background category, which 1.4.0 does.
+**Or through TizenBrew**, instead of the app: install TizenBrew on the TV ([guide](https://github.com/reisxd/TizenBrew/blob/main/docs/README.md)), add the GitHub module `duckieonquacks/tizenglow` in its module manager ([GREEN] button), and open the module. TizenBrew then starts the service. Without a version it always loads the newest release; add `@v<version>` (for example `duckieonquacks/tizenglow@v1.0.0`) to stay on one release.
 
-Updating: install the new release's TPK. The page updates by itself (it can take a few hours to reach the TV because of CDN caching; pin `@v<version>` to get it immediately). Your settings are kept as long as the new TPK installs over the old one; if the TV makes you uninstall first (different signing certificate), enter them again.
+**Starting with the TV:** TizenGlow's service is started when you open the app or TizenBrew, so after a full restart of the TV (a power cut, a firmware update, or Samsung's occasional full reboot) nothing runs until something starts it. **Start with the TV** (under Capture, on by default) keeps a repeating system alarm pointed at the service: while the service runs it does nothing, and after a restart the next alarm starts it again, within 10 minutes (the shortest repeat Tizen allows), without opening TizenBrew. If the TV is in standby at that moment, capture waits until the screen comes on. Tizen's own start-at-boot flag has been ignored since Tizen 2.4, so this is the workaround. **Autostart** in the status says `on`, `off`, or why the TV refused the alarm. For an immediate start whenever you open TizenBrew, also set TizenGlow under TizenBrew's **Settings > Autolaunch Settings for services**. Services before 1.4.0 couldn't set the alarm (`not available: ... NotPermittedApp`): Tizen only lets an alarm start a service that declares a background category, which 1.4.0 does.
+
+Updating: install the new release's TPK and app. As a TizenBrew module the page updates by itself (it can take a few hours to reach the TV because of CDN caching; pin `@v<version>` to get it immediately). Your settings are kept as long as the new TPK installs over the old one; if the TV makes you uninstall first (different signing certificate), enter them again.
 
 ## Using TizenGlowUI with the remote
 
@@ -169,10 +169,10 @@ It prints the capture state, capture and send FPS, frame time, peak sample, poin
 
 ## Releasing a new version
 
-1. Set the same version in `TizenGlow/tizen-manifest.xml`, `package.json` and `uiVersion` in `TizenGlowUI/js/wsClient.js`. Raise `minService` in the same file only when the page needs something new from the service; leave it for a page-only release, whose TPK is then optional.
+1. Set the same version in `TizenGlow/tizen-manifest.xml`, `package.json`, `TizenGlowUI/config.xml` and `uiVersion` in `TizenGlowUI/js/wsClient.js`. Raise `minService` in the same file only when the page needs something new from the service; leave it for a page-only release, whose TPK is then optional.
 2. Commit, then push a tag `v<version>` (for example `git tag v1.0.1 && git push origin v1.0.1`).
 
-The [Release workflow](../.github/workflows/release.yml) checks that the three versions and the tag agree, builds the TPK on GitHub and publishes a release with the TPK and its SHA-256. The service's version is taken from `tizen-manifest.xml` at build time and reported to the page, which is how the top bar knows when the two halves differ. Running the workflow by hand (Actions > Release > Run workflow) only builds the TPK, as a downloadable artifact.
+The [Release workflow](../.github/workflows/release.yml) checks that the four versions and the tag agree, runs the page check (`node tools/check-page.js`), builds the TPK and the app (WGT) on GitHub and publishes a release with both and their SHA-256. The service's version is taken from `tizen-manifest.xml` at build time and reported to the page, which is how the top bar knows when the two halves differ. Running the workflow by hand (Actions > Release > Run workflow) only builds the two packages, as a downloadable artifact.
 
 ## Building the package
 
@@ -199,3 +199,5 @@ tizen package -t tpk -s YourProfileName -o path/to/output/dir -- path/to/io.gh.d
 ```
 
 4. You should now be able to install the package.
+
+The app is signed the same way with `-t wgt`: `tizen package -t wgt -s YourProfileName -o path/to/output/dir -- path/to/TizenGlow-<version>.wgt`.

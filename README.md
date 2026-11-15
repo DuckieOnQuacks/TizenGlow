@@ -8,11 +8,11 @@ TizenGlow lights the LEDs behind a Samsung Tizen TV from what's on its screen. T
 - **Calibration screen:** full-screen test patterns shown by the TV (solid colours, edges, corners, a moving marker, a rainbow) to check colours, orientation and alignment through the whole capture path.
 - **Live status:** capture and send FPS, frame timing, the detected capture API and errors, and a preview ring of the strip, on a settings page made for the remote.
 
-Needs a Samsung TV with Tizen 6.5 or newer (2022+) and [TizenBrew](https://github.com/reisxd/TizenBrew).
+Needs a Samsung TV with Tizen 6.5 or newer (2022+) and a way to install apps on it (TizenBrew Installer or Tizen Studio).
 
 ## Getting started
 
-Read the [guide](./docs/README.md): install the TPK from the [latest release](https://github.com/DuckieOnQuacks/TizenGlow/releases/latest), then add the TizenBrew module `duckieonquacks/tizenglow`.
+Read the [guide](./docs/README.md): install the TPK (the service) and the WGT (the TizenGlow app with the settings) from the [latest release](https://github.com/DuckieOnQuacks/TizenGlow/releases/latest). Instead of the app, the settings also load as the [TizenBrew](https://github.com/reisxd/TizenBrew) module `duckieonquacks/tizenglow`.
 
 TizenGlow drives WLED only. HyperHDR / Hyperion output was removed in 1.4.0; 1.3.1 is the last release with it.
 
