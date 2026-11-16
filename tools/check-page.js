@@ -10,6 +10,8 @@ const html = fs.readFileSync(path.join(ui, 'index.html'), 'utf8');
 const source = fs.readFileSync(path.join(ui, 'js', 'wsClient.js'), 'utf8');
 const ids = new Set([...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]));
 const serviceAppId = 'io.gh.duckieonquacks.TizenGlow';
+const packageId = 'Sj1Em5JlZW';
+const starter = { operation: 'http://tizen.org/appcontrol/operation/service', id: packageId + '.TizenGlowStarter' };
 const tvAddress = '192.168.1.20';
 
 /** A freshly loaded page. protocol 'file:' is the installed app, anything else the TizenBrew module. */
@@ -41,12 +43,16 @@ function page(protocol, options = {}) {
                     if (options.notInstalled) throw { name: 'NotFoundError', message: 'no such app' };
                     return { id };
                 },
-                launch(id, ok, failed) {
-                    log.launches.push(id);
+                getCurrentApplication: () => ({ appInfo: { packageId } }),
+                // A TV refuses a page that launches another package's service directly (UnknownError).
+                launch(id, ok, failed) { failed({ name: 'UnknownError', message: 'Unknown error.' }); },
+                launchAppControl(control, id, ok, failed) {
+                    log.launches.push({ operation: control.operation, id });
                     if (options.launchThrows) throw { name: 'SecurityError', message: 'not allowed' };
                     if (options.launchFails) failed({ name: 'SecurityError', message: 'not allowed' });
                 },
             },
+            ApplicationControl: function (operation) { this.operation = operation; },
         },
         webapis: { network: { getIp: () => tvAddress } },
         alert: m => { throw new Error('alert: ' + m); },
@@ -107,7 +113,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     {
         const p = page('file:');
         p.ctx.startPage();
-        assert.deepStrictEqual(p.log.launches, [serviceAppId], 'the app starts the service');
+        assert.deepStrictEqual(p.log.launches, [starter], 'the app starts its background service, which starts the TV service');
         assert.strictEqual(p.log.sockets[0].url, 'ws://127.0.0.1:8086');
         p.log.sockets[0].onerror();
         assert.strictEqual(p.log.sockets[1].url, `ws://${tvAddress}:8086`, 'falls back to the TV address');
@@ -128,7 +134,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
         assert.strictEqual(p.log.reloads, 0, 'no reload while the service starts');
         assert.deepStrictEqual(p.log.timers.map(t => t.ms), [1000]);
         p.log.timers[0].fn();
-        assert.deepStrictEqual(p.log.launches, [serviceAppId, serviceAppId]);
+        assert.deepStrictEqual(p.log.launches, [starter, starter]);
         assert.strictEqual(p.log.sockets[2].url, 'ws://127.0.0.1:8086');
     }
 
@@ -150,7 +156,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
     {
         const p = page('app:');
         p.ctx.startPage();
-        assert.deepStrictEqual(p.log.launches, [serviceAppId]);
+        assert.deepStrictEqual(p.log.launches, [starter]);
         assert.strictEqual(p.log.fetches.length, 0);
     }
 
@@ -195,6 +201,28 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
         brew.ctx.showVersions('99.0.0');
         assert(app.element('versions').textContent.endsWith('install the latest app'), app.element('versions').textContent);
         assert(brew.element('versions').textContent.endsWith('update the TizenBrew module'), brew.element('versions').textContent);
+    }
+
+    // The app's background service (js/starter.js) starts the TV service, when started and when asked again,
+    // and the manifest declares it under the ID the page launches.
+    {
+        const launched = [];
+        const ctx = {
+            module: { exports: {} },
+            tizen: { application: { launch(id) { launched.push(id); if (launched.length === 3) throw new Error('refused'); } } },
+        };
+        vm.createContext(ctx);
+        vm.runInContext(fs.readFileSync(path.join(ui, 'js', 'starter.js'), 'utf8'), ctx);
+        ctx.module.exports.onStart();
+        ctx.module.exports.onRequest();
+        ctx.module.exports.onRequest(); // a refused launch must not crash the background service
+        ctx.module.exports.onExit();
+        assert.deepStrictEqual(launched, [serviceAppId, serviceAppId, serviceAppId]);
+
+        const config = fs.readFileSync(path.join(ui, 'config.xml'), 'utf8');
+        assert(config.includes(`package="${packageId}"`), 'the check knows the package ID');
+        assert(new RegExp(`<tizen:service id="${starter.id}"[^>]*>\\s*<tizen:content src="js/starter.js"/>`).test(config), 'config.xml declares the starter');
+        assert(config.includes('<feature name="http://tizen.org/feature/web.service"/>'), 'config.xml asks for web services');
     }
 
     console.log('page check passed');

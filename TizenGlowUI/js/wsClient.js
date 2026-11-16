@@ -1,5 +1,5 @@
 // This page's version. Must equal tizen-manifest.xml, package.json and config.xml; the release workflow checks.
-const uiVersion = '1.5.0';
+const uiVersion = '1.5.1';
 // Oldest service (TPK) this page works with. Raise it only when the page needs something new from the
 // service; a page-only release leaves it, and that release's TPK is then optional.
 const minService = '1.4.0'; // WLED only
@@ -42,7 +42,8 @@ function tryHosts(hosts) {
     test.onerror = () => tryHosts(hosts.slice(1));
 }
 
-// What TizenBrew's js/service.js does for the module. Launching a service that already runs is harmless.
+// Starts the TV service through the app's own background service (js/starter.js): a TV refuses a page that
+// launches another package's service directly. Launching a service that already runs is harmless.
 function launchService() {
     const status = text => { document.getElementById('status').textContent = text; };
     const failed = e => status(`Couldn't start the service: ${e && e.name}: ${e && e.message}`);
@@ -52,7 +53,9 @@ function launchService() {
         return status('Service not found: install the TPK');
     }
     try {
-        tizen.application.launch(serviceAppId, () => { }, failed);
+        const starter = tizen.application.getCurrentApplication().appInfo.packageId + '.TizenGlowStarter';
+        tizen.application.launchAppControl(
+            new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/service'), starter, () => { }, failed);
     } catch (e) {
         failed(e);
     }

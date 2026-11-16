@@ -50,8 +50,7 @@ Picked 1 because the aim is only fewer steps, and it is the one that can't break
   which is TizenBrew's).
 - **Telling the two hosts apart:** the installed app loads the page from `file:`; TizenBrew loads it over
   HTTP. `file:` means standalone.
-- **Startup, standalone:** launch the service by its app ID (what `service.js` does under TizenBrew), then
-  connect to `ws://127.0.0.1:8086`, falling back to the TV's own address from `webapis.network.getIp()`.
+- **Startup, standalone:** start the service, then connect to `ws://127.0.0.1:8086`, falling back to the TV's own address from `webapis.network.getIp()`.
   Retry once a second until the service answers.
 - **Startup, TizenBrew:** unchanged (address from TizenBrew's helper on port 8081).
 - **Back:** standalone only. While typing in a box it ends typing; otherwise it exits the app. The
@@ -62,6 +61,13 @@ Picked 1 because the aim is only fewer steps, and it is the one that can't break
 - **Release:** version 1.5.0. The workflow checks `config.xml`'s version with the other three, zips the
   `.wgt`, and attaches it and its SHA-256 to the release.
 - **Docs:** the install guide gains the app as the main route, with the TizenBrew module as the alternative.
+
+## Changed after the first install (1.5.1)
+
+The TV refused the page's direct launch of the service (`UnknownError`). A web app's page may not launch
+another package's service; its background service may, which is how TizenBrew does it. The app now carries
+a background service, `js/starter.js` (`Sj1Em5JlZW.TizenGlowStarter`), that the page starts and that
+starts the TV service.
 
 ## Left to the builder
 
