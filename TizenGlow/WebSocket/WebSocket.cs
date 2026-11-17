@@ -29,7 +29,7 @@ namespace TizenGlow.WebSocket
                 if (httpContext.Request.IsWebSocketRequest)
                 {
                     var wsContext = await httpContext.AcceptWebSocketAsync(null);
-                    _ = HandleWebSocketAsync(wsContext.WebSocket);
+                    _ = HandleWebSocketAsync(wsContext.WebSocket, httpContext.Response);
                 }
                 else
                 {
@@ -39,19 +39,17 @@ namespace TizenGlow.WebSocket
             }
         }
 
-        private async Task HandleWebSocketAsync(System.Net.WebSockets.WebSocket webSocket)
+        private async Task HandleWebSocketAsync(System.Net.WebSockets.WebSocket webSocket, HttpListenerResponse response)
         {
-            var buffer = new byte[1024 * 4];
-            var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
-
-            while (result.MessageType != WebSocketMessageType.Close)
+            try
             {
-                var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                await OnMessageAsync(webSocket, message);
-                result = await webSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                await WebSocketConnection.HandleAsync(webSocket, OnMessageAsync, response.Abort);
             }
-
-            await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, string.Empty, CancellationToken.None);
+            catch (Exception e)
+            {
+                // A failed client must not leave an unobserved task or stop other connections.
+                Tizen.Log.Error("TGWS", "connection: " + e.GetType().Name);
+            }
         }
 
         protected async Task OnMessageAsync(System.Net.WebSockets.WebSocket webSocket, string message)
